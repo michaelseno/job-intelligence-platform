@@ -588,6 +588,8 @@ This planning task itself creates only:
 - Reminder threshold defaults will come from configuration rather than per-job user customization in MVP.
 - SQL migrations, repositories, and ORM details may be chosen during implementation so long as they preserve the schema and service boundaries described here.
 - Background scheduling may use a lightweight in-process mechanism in MVP provided execution state is persisted in PostgreSQL.
+- For this implementation pass, Greenhouse and Lever will be the only fully working connectors; `common_pattern` and `custom_adapter` remain framework-level extension points and return explicit unsupported validation errors until named adapters are approved.
+- MVP defaults will be used for reminder timing (`saved` = 3 days, `applied` = 7 days) and digest generation will persist in-app outputs without blocking on final scheduling polish.
 
 ## 6. Validation Plan
 Because this task is documentation-only, validation for this artifact is limited to planning completeness and alignment checks.
