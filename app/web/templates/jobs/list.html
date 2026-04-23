@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Jobs · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Jobs', 'Triage ingested jobs by automated bucket, tracking status, source, and search.') }}
+
+  <section class="panel">
+    <form method="get" class="filters-form">
+      <div class="field-group field-group-wide">
+        <label for="search">Search jobs</label>
+        <input id="search" name="search" type="search" value="{{ filters.search }}" placeholder="Title, company, or description">
+      </div>
+      <div class="field-group">
+        <label for="bucket">Automated bucket</label>
+        <select id="bucket" name="bucket">
+          <option value="">All buckets</option>
+          <option value="matched" {% if filters.bucket == 'matched' %}selected{% endif %}>Matched</option>
+          <option value="review" {% if filters.bucket == 'review' %}selected{% endif %}>Review</option>
+          <option value="rejected" {% if filters.bucket == 'rejected' %}selected{% endif %}>Rejected</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="tracking_status">Tracking status</label>
+        <select id="tracking_status" name="tracking_status">
+          <option value="">All tracking states</option>
+          {% for status in tracking_statuses %}
+            <option value="{{ status }}" {% if filters.tracking_status == status %}selected{% endif %}>{{ status|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="source_id">Source</label>
+        <select id="source_id" name="source_id">
+          <option value="">All sources</option>
+          {% for source in available_sources %}
+            <option value="{{ source.id }}" {% if filters.source_id == source.id|string %}selected{% endif %}>{{ source.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="sort">Sort</label>
+        <select id="sort" name="sort">
+          <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>Newest</option>
+          <option value="highest_score" {% if filters.sort == 'highest_score' %}selected{% endif %}>Highest score</option>
+          <option value="title" {% if filters.sort == 'title' %}selected{% endif %}>Title A–Z</option>
+          <option value="company" {% if filters.sort == 'company' %}selected{% endif %}>Company A–Z</option>
+        </select>
+      </div>
+      <div class="button-row button-row-wrap">
+        <button class="button button-primary" type="submit">Apply filters</button>
+        <a class="button button-secondary" href="/jobs">Reset filters</a>
+      </div>
+    </form>
+  </section>
+
+  {% if jobs %}
+    <section class="panel jobs-table-panel">
+      <p class="results-summary">{{ jobs|length }} job(s) found. Automated bucket, tracking status, and source health remain separate in this view.</p>
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Automated bucket</th>
+              <th>Tracking</th>
+              <th>Score</th>
+              <th>Top reason</th>
+              <th>Updated</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for job in jobs %}
+              <tr class="{% if job.bucket == 'rejected' %}row-muted{% endif %}">
+                <td>
+                  <a href="/jobs/{{ job.id }}"><strong>{{ job.title }}</strong></a>
+                  <div class="cell-subtitle">{{ job.company_name }} · {{ job.source_name }}</div>
+                  {% if job.location_text %}<div class="cell-subtitle">{{ job.location_text }}</div>{% endif %}
+                </td>
+                <td>{{ ui.badge('bucket', job.bucket) }}</td>
+                <td>{{ ui.badge('tracking', job.tracking_status) }}</td>
+                <td>{{ job.score if job.score is not none else '—' }}</td>
+                <td class="reason-cell">{{ job.reason_summary }}</td>
+                <td>{{ format_dt(job.last_seen_at) }}</td>
+                <td>
+                  <div class="actions-stack">
+                    <a class="button button-secondary" href="/jobs/{{ job.id }}">View</a>
+                    {{ ui.keep_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) }}
+                    {{ ui.tracking_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else ''), tracking_statuses, True) }}
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="mobile-card-list">
+      {% for job in jobs %}
+        <article class="job-card {% if job.bucket == 'rejected' %}job-card-muted{% endif %}">
+          <div class="job-card__header">
+            <div>
+              <h2><a href="/jobs/{{ job.id }}">{{ job.title }}</a></h2>
+              <p class="muted">{{ job.company_name }} · {{ job.source_name }}</p>
+            </div>
+            <div class="badge-stack">{{ ui.badge('bucket', job.bucket) }} {{ ui.badge('tracking', job.tracking_status) }}</div>
+          </div>
+          <p>{{ job.reason_summary }}</p>
+          <p class="muted">Score: {{ job.score if job.score is not none else '—' }} · {{ format_dt(job.last_seen_at) }}</p>
+          <div class="button-row button-row-wrap">
+            <a class="button button-secondary" href="/jobs/{{ job.id }}">View</a>
+            {{ ui.keep_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) }}
+          </div>
+          {{ ui.tracking_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else ''), tracking_statuses) }}
+        </article>
+      {% endfor %}
+    </section>
+  {% else %}
+    {{ ui.empty_state('No jobs match the current view', 'Either ingestion has not produced jobs yet, or the current filters narrow the list to zero results.', '/sources', 'Open Sources') }}
+  {% endif %}
+{% endblock %}

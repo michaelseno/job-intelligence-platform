@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}{{ source.name }} · Sources{% endblock %}
+
+{% block content %}
+  {{ ui.page_header(source.name, 'Source metadata, latest health state, and ingestion history.') }}
+
+  <section class="panel detail-grid-two">
+    <div>
+      <h2>Source metadata</h2>
+      <ul class="meta-list">
+        <li><strong>Type:</strong> {{ source.source_type|replace('_', ' ')|title }}</li>
+        <li><strong>Company:</strong> {{ source.company_name or '—' }}</li>
+        <li><strong>Base URL:</strong> <a href="{{ source.base_url }}" target="_blank" rel="noreferrer">{{ source.base_url }}</a></li>
+        <li><strong>External identifier:</strong> {{ source.external_identifier or '—' }}</li>
+        <li><strong>Adapter key:</strong> {{ source.adapter_key or '—' }}</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Health summary</h2>
+      <p>{{ ui.badge('health', source.health_state) }}</p>
+      <p>{{ source.health_message or 'No active warning message.' }}</p>
+      <ul class="meta-list">
+        <li><strong>Last run:</strong> {{ format_dt(source.last_run_at) }}</li>
+        <li><strong>Last run status:</strong> {{ source.last_run_status or '—' }}</li>
+        <li><strong>Jobs fetched:</strong> {{ source.last_jobs_fetched_count }}</li>
+        <li><strong>Consecutive empty runs:</strong> {{ source.consecutive_empty_runs }}</li>
+      </ul>
+      <form method="post" action="/sources/{{ source.id }}/run" class="inline-form">
+        <input type="hidden" name="next_url" value="/sources/{{ source.id }}">
+        <button class="button button-primary" type="submit">Run ingestion</button>
+      </form>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel__header">
+      <h2>Run history</h2>
+      <a href="/ops/runs">View all runs</a>
+    </div>
+    {% if runs %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Started</th><th>Status</th><th>Fetched</th><th>Created</th><th>Updated</th><th>Warnings</th><th>Details</th></tr></thead>
+          <tbody>
+            {% for run in runs %}
+              <tr>
+                <td>{{ format_dt(run.started_at) }}</td>
+                <td>{{ ui.badge('health', run.status, run.status|replace('_', ' ')|title) }}</td>
+                <td>{{ run.jobs_fetched_count }}</td>
+                <td>{{ run.jobs_created_count }}</td>
+                <td>{{ run.jobs_updated_count }}</td>
+                <td>{{ run.warning_count }}</td>
+                <td><a href="/ops/runs/{{ run.id }}">View run</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No runs recorded yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

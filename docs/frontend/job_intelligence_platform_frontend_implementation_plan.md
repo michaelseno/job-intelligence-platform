@@ -574,8 +574,27 @@ tests/integration/web/*
 tests/end_to_end/*
 ```
 
-Current task scope changes only this document:
+Current implementation pass is expected to change:
+- `app/main.py`
+- `app/web/routes.py`
+- `app/web/templates/base.html`
+- `app/web/templates/includes/macros.html`
+- `app/web/templates/dashboard/index.html`
+- `app/web/templates/jobs/list.html`
+- `app/web/templates/jobs/detail.html`
+- `app/web/templates/sources/index.html`
+- `app/web/templates/sources/detail.html`
+- `app/web/templates/ops/source_health.html`
+- `app/web/templates/ops/run_list.html`
+- `app/web/templates/ops/run_detail.html`
+- `app/web/templates/tracking/index.html`
+- `app/web/templates/notifications/digest.html`
+- `app/web/templates/notifications/reminders.html`
+- `app/web/static/styles.css`
+- `app/web/static/app.js`
+- `tests/integration/test_html_views.py`
 - `docs/frontend/job_intelligence_platform_frontend_implementation_plan.md`
+- `docs/frontend/job_intelligence_platform_frontend_implementation_report.md`
 
 ## 5. Dependencies / Constraints
 
@@ -606,6 +625,7 @@ Constraints:
 7. Save/Keep actions should preserve current page context through redirect query-string retention.
 8. The frontend will present evidence primarily as normalized text snippets rather than rendering arbitrary scraped HTML.
 9. Pagination is not specified in the upstream docs; list views should be structured so pagination can be added later without changing page architecture.
+10. Unsupported `common_pattern` and `custom_adapter` source families should remain visible in the UI with explicit unsupported messaging rather than being hidden.
 
 ## 7. Validation Plan
 
@@ -621,3 +641,8 @@ For future frontend implementation work based on this plan:
 - perform manual responsive checks at desktop/tablet/mobile widths
 - verify empty/error/warning/success states on each main page
 - verify keyboard accessibility and visible focus behavior for filters, forms, and row actions
+
+Implementation pass validation target:
+- `python3 -m compileall app tests`
+- `.venv/bin/python -m pytest`
+- route smoke coverage for HTML dashboard, jobs, and form redirect flows

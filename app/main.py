@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI
+from starlette.staticfiles import StaticFiles
 
 from app.config.logging import configure_logging
 from app.config.settings import get_settings
@@ -27,4 +29,6 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Job Intelligence Platform MVP", lifespan=lifespan)
+static_dir = Path(__file__).resolve().parent / "web" / "static"
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.include_router(router)

@@ -1,0 +1,60 @@
+{% macro alert(level, message) -%}
+  <div class="alert alert-{{ level }}" role="status">{{ message }}</div>
+{%- endmacro %}
+
+{% macro badge(kind, value, label=None) -%}
+  {% if value %}
+    <span class="badge badge-{{ kind }} badge-{{ value|replace('_', '-') }}">{{ label or value|replace('_', ' ')|title }}</span>
+  {% else %}
+    <span class="badge badge-muted">None</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro page_header(title, description='', actions='') -%}
+  <section class="page-header">
+    <div>
+      <h1>{{ title }}</h1>
+      {% if description %}<p>{{ description }}</p>{% endif %}
+    </div>
+    {% if actions %}<div class="page-header__actions">{{ actions }}</div>{% endif %}
+  </section>
+{%- endmacro %}
+
+{% macro empty_state(title, message, href=None, link_label=None) -%}
+  <section class="empty-state">
+    <h2>{{ title }}</h2>
+    <p>{{ message }}</p>
+    {% if href and link_label %}<a class="button button-primary" href="{{ href }}">{{ link_label }}</a>{% endif %}
+  </section>
+{%- endmacro %}
+
+{% macro stat_card(label, value, tone='default', href=None) -%}
+  <article class="stat-card stat-card-{{ tone }}">
+    <p class="stat-card__label">{{ label }}</p>
+    <p class="stat-card__value">{{ value }}</p>
+    {% if href %}<a href="{{ href }}" class="stat-card__link">Open</a>{% endif %}
+  </article>
+{%- endmacro %}
+
+{% macro keep_form(job, next_url) -%}
+  <form method="post" action="/jobs/{{ job.id }}/keep" class="inline-form">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <button class="button button-secondary" type="submit" {% if job.tracking_status %}disabled{% endif %}>
+      {% if job.tracking_status %}Already tracked{% else %}Save / Keep Job{% endif %}
+    </button>
+  </form>
+{%- endmacro %}
+
+{% macro tracking_form(job, next_url, statuses, compact=False) -%}
+  <form method="post" action="/jobs/{{ job.id }}/tracking-status" class="tracking-form{% if compact %} tracking-form-compact{% endif %}" data-auto-submit>
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label class="sr-only" for="tracking-status-{{ job.id }}">Tracking status for {{ job.title }}</label>
+    <select id="tracking-status-{{ job.id }}" name="tracking_status">
+      <option value="">Select status</option>
+      {% for status in statuses %}
+        <option value="{{ status }}" {% if job.tracking_status == status %}selected{% endif %}>{{ status|title }}</option>
+      {% endfor %}
+    </select>
+    <button class="button button-secondary" type="submit">Update</button>
+  </form>
+{%- endmacro %}
