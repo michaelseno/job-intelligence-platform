@@ -46,6 +46,7 @@ def test_dashboard_and_jobs_html_render(client, monkeypatch):
     dashboard_response = client.get("/dashboard", headers={"accept": "text/html"})
     assert dashboard_response.status_code == 200
     assert "Dashboard" in dashboard_response.text
+    assert "Rejected" in dashboard_response.text
     assert "Recent review jobs" in dashboard_response.text
 
     jobs_response = client.get("/jobs", headers={"accept": "text/html"})

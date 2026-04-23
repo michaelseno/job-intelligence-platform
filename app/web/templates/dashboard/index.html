@@ -9,6 +9,7 @@
   <section class="stat-grid">
     {{ ui.stat_card('Matched', summary.matched, 'matched', '/jobs?bucket=matched') }}
     {{ ui.stat_card('Review', summary.review, 'review', '/jobs?bucket=review') }}
+    {{ ui.stat_card('Rejected', summary.rejected, 'rejected', '/jobs?bucket=rejected') }}
     {{ ui.stat_card('Saved needing action', summary.saved, 'default', '/tracking?tracking_status=saved') }}
     {{ ui.stat_card('Applied follow-up', summary.applied, 'default', '/tracking?tracking_status=applied') }}
   </section>
