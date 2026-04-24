@@ -99,3 +99,46 @@ def test_csv_import_mixed_valid_invalid_and_duplicate(client):
     assert data["created"] == 1
     assert data["invalid"] == 1
     assert data["skipped_duplicate"] == 1
+
+
+def test_jobs_api_treats_empty_source_filter_as_unset_and_keeps_integer_filtering(client, monkeypatch):
+    greenhouse_payload = {
+        "jobs": [
+            {
+                "id": 77,
+                "title": "Senior Backend Engineer",
+                "absolute_url": "https://example.com/jobs/77",
+                "location": {"name": "Remote"},
+                "content": "<p>Backend platform role with Python ownership.</p>",
+                "updated_at": "2026-04-23T10:00:00Z",
+            }
+        ]
+    }
+    monkeypatch.setattr("app.adapters.greenhouse.adapter.httpx.get", lambda *args, **kwargs: DummyResponse(greenhouse_payload))
+
+    create_response = client.post(
+        "/sources",
+        json={
+            "name": "Example Filter Source",
+            "source_type": "greenhouse",
+            "base_url": "https://boards.greenhouse.io/filter-example",
+            "external_identifier": "filter-example",
+            "company_name": "Example",
+        },
+    )
+    assert create_response.status_code == 201
+    source_id = create_response.json()["id"]
+
+    run_response = client.post(f"/sources/{source_id}/run")
+    assert run_response.status_code == 200
+
+    empty_filter_response = client.get("/jobs?source_id=")
+    assert empty_filter_response.status_code == 200
+    assert len(empty_filter_response.json()) == 1
+
+    valid_filter_response = client.get(f"/jobs?source_id={source_id}")
+    assert valid_filter_response.status_code == 200
+    assert len(valid_filter_response.json()) == 1
+
+    invalid_filter_response = client.get("/jobs?source_id=abc")
+    assert invalid_filter_response.status_code == 422

@@ -6,8 +6,10 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -35,6 +37,7 @@ from app.web.dependencies import get_registry
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+INT_QUERY_ADAPTER = TypeAdapter(int)
 
 SOURCE_TYPE_HELP = {
     "greenhouse": "First-class MVP support. Requires the Greenhouse board token in external identifier.",
@@ -79,6 +82,25 @@ def with_message(url: str, level: str | None = None, message: str | None = None)
     query["message_type"] = level
     query["message"] = message
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def parse_optional_int_query(param_name: str, value: str | None) -> int | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if normalized == "":
+        return None
+    try:
+        return INT_QUERY_ADAPTER.validate_python(normalized)
+    except ValidationError as exc:
+        errors = exc.errors()
+        for error in errors:
+            error["loc"] = ("query", param_name)
+        raise RequestValidationError(errors) from exc
+
+
+def parse_optional_source_id(source_id: str | None = Query(default=None)) -> int | None:
+    return parse_optional_int_query("source_id", source_id)
 
 
 def redirect(url: str, status_code: int = status.HTTP_303_SEE_OTHER) -> RedirectResponse:
@@ -440,7 +462,7 @@ def list_jobs(
     request: Request,
     bucket: str | None = Query(default=None),
     tracking_status: str | None = Query(default=None),
-    source_id: int | None = Query(default=None),
+    source_id: int | None = Depends(parse_optional_source_id),
     search: str | None = Query(default=None),
     sort: str = Query(default="newest"),
     session: Session = Depends(get_session_dependency),

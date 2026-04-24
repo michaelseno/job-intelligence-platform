@@ -40,6 +40,35 @@ def seed_job(client, monkeypatch):
     return client.get("/jobs").json()[0]
 
 
+def seed_job_with_source(client, monkeypatch):
+    greenhouse_payload = {
+        "jobs": [
+            {
+                "id": 100,
+                "title": "Backend Platform Engineer",
+                "absolute_url": "https://example.com/jobs/100",
+                "location": {"name": "Remote"},
+                "content": "<p>Platform engineering role with Python and backend ownership.</p>",
+                "updated_at": "2026-04-23T11:00:00Z",
+            }
+        ]
+    }
+    monkeypatch.setattr("app.adapters.greenhouse.adapter.httpx.get", lambda *args, **kwargs: DummyResponse(greenhouse_payload))
+    source = client.post(
+        "/sources",
+        json={
+            "name": "Filterable Greenhouse",
+            "source_type": "greenhouse",
+            "base_url": "https://boards.greenhouse.io/filterable",
+            "external_identifier": "filterable",
+            "company_name": "Filterable",
+        },
+    ).json()
+    client.post(f"/sources/{source['id']}/run")
+    job = client.get("/jobs").json()[0]
+    return source, job
+
+
 def test_dashboard_and_jobs_html_render(client, monkeypatch):
     seed_job(client, monkeypatch)
 
@@ -82,3 +111,12 @@ def test_html_forms_redirect_for_source_and_tracking(client, monkeypatch):
     )
     assert tracking_response.status_code == 303
     assert tracking_response.headers["location"].startswith("/jobs?")
+
+
+def test_jobs_html_treats_empty_source_filter_as_unset(client, monkeypatch):
+    _, job = seed_job_with_source(client, monkeypatch)
+
+    response = client.get("/jobs?source_id=", headers={"accept": "text/html"})
+
+    assert response.status_code == 200
+    assert job["title"] in response.text
