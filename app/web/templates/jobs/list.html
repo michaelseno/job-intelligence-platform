@@ -7,7 +7,7 @@
   {{ ui.page_header('Jobs', 'Triage ingested jobs by automated bucket, tracking status, source, and search.') }}
 
   <section class="panel">
-    <form method="get" class="filters-form">
+    <form method="get" class="filters-form" data-clean-empty-query="true">
       <div class="field-group field-group-wide">
         <label for="search">Search jobs</label>
         <input id="search" name="search" type="search" value="{{ filters.search }}" placeholder="Title, company, or description">
