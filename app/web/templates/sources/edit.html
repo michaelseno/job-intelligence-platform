@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Edit source · Sources{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Edit source', 'Update source metadata and activation status. Changes apply to future source management and ingestion behavior.') }}
+
+  <section class="panel">
+    <p class="muted">Update source metadata and activation status.</p>
+    {% if form_errors.get('__all__') %}
+      <div class="alert alert-error" role="alert">{{ form_errors['__all__']|join(' ') }}</div>
+    {% elif form_errors %}
+      <div class="alert alert-error" role="alert">Source update failed. Review the highlighted fields and try again.</div>
+    {% endif %}
+    <form method="post" action="/sources/{{ source.id }}/edit" class="form-grid">
+      <div class="field-group">
+        <label for="name">Source name</label>
+        <input id="name" name="name" value="{{ form_data.name }}" required {% if form_errors.get('name') %}aria-invalid="true" aria-describedby="name-error"{% endif %}>
+        {% for error in form_errors.get('name', []) %}<p class="field-error" id="name-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="field-group">
+        <label for="source_type">Source type</label>
+        <select id="source_type" name="source_type" {% if form_errors.get('source_type') %}aria-invalid="true" aria-describedby="source-type-error"{% endif %}>
+          {% for source_type, help_text in source_type_options.items() %}
+            <option value="{{ source_type }}" {% if form_data.source_type == source_type %}selected{% endif %}>{{ source_type|replace('_', ' ')|title }}</option>
+          {% endfor %}
+        </select>
+        {% for error in form_errors.get('source_type', []) %}<p class="field-error" id="source-type-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="field-group">
+        <label for="company_name">Company name</label>
+        <input id="company_name" name="company_name" value="{{ form_data.company_name }}">
+      </div>
+      <div class="field-group field-group-wide">
+        <label for="base_url">Source URL</label>
+        <input id="base_url" name="base_url" type="url" value="{{ form_data.base_url }}" required {% if form_errors.get('base_url') %}aria-invalid="true" aria-describedby="base-url-error"{% endif %}>
+        {% for error in form_errors.get('base_url', []) %}<p class="field-error" id="base-url-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="field-group">
+        <label for="external_identifier">External identifier</label>
+        <input id="external_identifier" name="external_identifier" value="{{ form_data.external_identifier }}" aria-describedby="external-identifier-help{% if form_errors.get('external_identifier') %} external-identifier-error{% endif %}" {% if form_errors.get('external_identifier') %}aria-invalid="true"{% endif %}>
+        <p class="field-help" id="external-identifier-help">Required for Greenhouse and Lever board/company identifiers.</p>
+        {% for error in form_errors.get('external_identifier', []) %}<p class="field-error" id="external-identifier-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="field-group">
+        <label for="adapter_key">Adapter key</label>
+        <input id="adapter_key" name="adapter_key" value="{{ form_data.adapter_key }}" aria-describedby="adapter-key-help{% if form_errors.get('adapter_key') %} adapter-key-error{% endif %}" {% if form_errors.get('adapter_key') %}aria-invalid="true"{% endif %}>
+        <p class="field-help" id="adapter-key-help">Future-facing for named common patterns or custom adapters.</p>
+        {% for error in form_errors.get('adapter_key', []) %}<p class="field-error" id="adapter-key-error">{{ error }}</p>{% endfor %}
+      </div>
+      <div class="field-group field-group-wide">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" rows="3">{{ form_data.notes }}</textarea>
+      </div>
+      <div class="field-group field-group-wide checkbox-field">
+        <label><input type="checkbox" name="is_active" {% if form_data.is_active %}checked{% endif %}> Active source</label>
+        <p class="field-help">Inactive sources remain visible in source management but cannot be run.</p>
+      </div>
+      <div class="button-row button-row-wrap">
+        <button class="button button-primary" type="submit">Save changes</button>
+        <a class="button button-secondary" href="/sources/{{ source.id }}">Cancel</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

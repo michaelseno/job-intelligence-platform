@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Run History · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Run History', 'Recent ingestion runs across all configured sources.') }}
+
+  <section class="panel">
+    {% if runs %}
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Started</th><th>Source</th><th>Status</th><th>Fetched</th><th>Created</th><th>Updated</th><th>Errors</th><th>Warnings</th></tr></thead>
+          <tbody>
+            {% for run in runs %}
+              {% set source = sources.get(run.source_id) %}
+              <tr>
+                <td><a href="/ops/runs/{{ run.id }}">{{ format_dt(run.started_at) }}</a></td>
+                <td>{{ source.name if source else 'Source #' ~ run.source_id }}</td>
+                <td>{{ ui.badge('health', run.status, run.status|replace('_', ' ')|title) }}</td>
+                <td>{{ run.jobs_fetched_count }}</td>
+                <td>{{ run.jobs_created_count }}</td>
+                <td>{{ run.jobs_updated_count }}</td>
+                <td>{{ run.error_count }}</td>
+                <td>{{ run.warning_count }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="muted">No source runs recorded yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}
