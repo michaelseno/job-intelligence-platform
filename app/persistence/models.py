@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -16,6 +16,15 @@ class Base(DeclarativeBase):
 
 class Source(Base):
     __tablename__ = "sources"
+    __table_args__ = (
+        Index(
+            "ix_sources_dedupe_key_active_unique",
+            "dedupe_key",
+            unique=True,
+            sqlite_where=text("deleted_at IS NULL"),
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255))
@@ -26,8 +35,9 @@ class Source(Base):
     external_identifier: Mapped[str | None] = mapped_column(String(255), nullable=True)
     config_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    dedupe_key: Mapped[str] = mapped_column(String(1024), unique=True)
+    dedupe_key: Mapped[str] = mapped_column(String(1024))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_run_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     last_jobs_fetched_count: Mapped[int] = mapped_column(Integer, default=0)

@@ -17,6 +17,17 @@ class SourceCreateRequest(BaseModel):
     config_json: dict | None = None
 
 
+class SourceUpdateRequest(BaseModel):
+    name: str | None = None
+    source_type: str | None = None
+    base_url: str | None = None
+    external_identifier: str | None = None
+    adapter_key: str | None = None
+    company_name: str | None = None
+    is_active: bool | None = None
+    notes: str | None = None
+
+
 class SourceResponse(BaseModel):
     id: int
     name: str
@@ -25,7 +36,9 @@ class SourceResponse(BaseModel):
     company_name: str | None
     base_url: str
     external_identifier: str | None
+    notes: str | None
     is_active: bool
+    deleted_at: datetime | None
     last_run_at: datetime | None
     last_run_status: str | None
     last_jobs_fetched_count: int
@@ -48,6 +61,22 @@ class SourceImportResponse(BaseModel):
     skipped_duplicate: int
     invalid: int
     rows: list[SourceImportRowResult]
+
+
+class SourceDeleteImpactResponse(BaseModel):
+    source_id: int
+    source_name: str
+    run_count: int
+    linked_job_count: int
+    tracked_job_count: int
+    has_run_history: bool
+    has_linked_jobs: bool
+
+
+class SourceDeleteResponse(BaseModel):
+    deleted: bool
+    source_id: int
+    deleted_at: datetime
 
 
 class SourceRunResponse(BaseModel):

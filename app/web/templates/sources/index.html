@@ -16,22 +16,22 @@
       <h2>Manual entry</h2>
       <p class="muted">Greenhouse and Lever are supported now. Future adapter families remain visible but unsupported in this MVP pass.</p>
       {% if form_errors.get('__all__') %}
-        <div class="alert alert-error">{{ form_errors['__all__']|join(' ') }}</div>
+        <div class="alert alert-error" role="alert">{{ form_errors['__all__']|join(' ') }}</div>
       {% endif %}
       <form method="post" action="/sources" class="form-grid">
         <div class="field-group">
           <label for="name">Source name</label>
-          <input id="name" name="name" value="{{ form_data.name }}" required>
-          {% for error in form_errors.get('name', []) %}<p class="field-error">{{ error }}</p>{% endfor %}
+          <input id="name" name="name" value="{{ form_data.name }}" required {% if form_errors.get('name') %}aria-invalid="true" aria-describedby="name-error"{% endif %}>
+          {% for error in form_errors.get('name', []) %}<p class="field-error" id="name-error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field-group">
           <label for="source_type">Source type</label>
-          <select id="source_type" name="source_type">
+          <select id="source_type" name="source_type" {% if form_errors.get('source_type') %}aria-invalid="true" aria-describedby="source-type-error"{% endif %}>
             {% for source_type, help_text in source_type_options.items() %}
               <option value="{{ source_type }}" {% if form_data.source_type == source_type %}selected{% endif %}>{{ source_type|replace('_', ' ')|title }}</option>
             {% endfor %}
           </select>
-          {% for error in form_errors.get('source_type', []) %}<p class="field-error">{{ error }}</p>{% endfor %}
+          {% for error in form_errors.get('source_type', []) %}<p class="field-error" id="source-type-error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field-group">
           <label for="company_name">Company name</label>
@@ -39,20 +39,20 @@
         </div>
         <div class="field-group field-group-wide">
           <label for="base_url">Source URL</label>
-          <input id="base_url" name="base_url" type="url" value="{{ form_data.base_url }}" required>
-          {% for error in form_errors.get('base_url', []) %}<p class="field-error">{{ error }}</p>{% endfor %}
+          <input id="base_url" name="base_url" type="url" value="{{ form_data.base_url }}" required {% if form_errors.get('base_url') %}aria-invalid="true" aria-describedby="base-url-error"{% endif %}>
+          {% for error in form_errors.get('base_url', []) %}<p class="field-error" id="base-url-error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field-group">
           <label for="external_identifier">External identifier</label>
-          <input id="external_identifier" name="external_identifier" value="{{ form_data.external_identifier }}">
-          <p class="field-help">Required for Greenhouse and Lever board/company identifiers.</p>
-          {% for error in form_errors.get('external_identifier', []) %}<p class="field-error">{{ error }}</p>{% endfor %}
+          <input id="external_identifier" name="external_identifier" value="{{ form_data.external_identifier }}" {% if form_errors.get('external_identifier') %}aria-invalid="true" aria-describedby="external-identifier-help external-identifier-error"{% else %}aria-describedby="external-identifier-help"{% endif %}>
+          <p class="field-help" id="external-identifier-help">Required for Greenhouse and Lever board/company identifiers.</p>
+          {% for error in form_errors.get('external_identifier', []) %}<p class="field-error" id="external-identifier-error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field-group">
           <label for="adapter_key">Adapter key</label>
-          <input id="adapter_key" name="adapter_key" value="{{ form_data.adapter_key }}">
-          <p class="field-help">Future-facing for named common patterns or custom adapters.</p>
-          {% for error in form_errors.get('adapter_key', []) %}<p class="field-error">{{ error }}</p>{% endfor %}
+          <input id="adapter_key" name="adapter_key" value="{{ form_data.adapter_key }}" {% if form_errors.get('adapter_key') %}aria-invalid="true" aria-describedby="adapter-key-help adapter-key-error"{% else %}aria-describedby="adapter-key-help"{% endif %}>
+          <p class="field-help" id="adapter-key-help">Future-facing for named common patterns or custom adapters.</p>
+          {% for error in form_errors.get('adapter_key', []) %}<p class="field-error" id="adapter-key-error">{{ error }}</p>{% endfor %}
         </div>
         <div class="field-group field-group-wide">
           <label for="notes">Notes</label>
@@ -118,21 +118,34 @@
       <div class="table-scroll">
         <table>
           <thead>
-            <tr><th>Source</th><th>Type</th><th>Health</th><th>Last run</th><th>Jobs fetched</th><th>Actions</th></tr>
+            <tr><th>Source</th><th>Type</th><th>Status</th><th>Health</th><th>Last run</th><th>Jobs fetched</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {% for source in sources %}
               <tr>
-                <td><a href="/sources/{{ source.id }}"><strong>{{ source.name }}</strong></a>{% if source.company_name %}<div class="cell-subtitle">{{ source.company_name }}</div>{% endif %}</td>
+                <td>
+                  <a href="/sources/{{ source.id }}"><strong>{{ source.name }}</strong></a>
+                  {% if source.company_name %}<div class="cell-subtitle">{{ source.company_name }}</div>{% endif %}
+                  {% if not source.is_active %}<div class="cell-subtitle">Inactive — cannot run</div>{% endif %}
+                </td>
                 <td>{{ source.source_type|replace('_', ' ')|title }}</td>
+                <td>{{ ui.badge('status', 'active' if source.is_active else 'inactive') }}</td>
                 <td>{{ ui.badge('health', source.health_state) }}</td>
                 <td>{{ format_dt(source.last_run_at) }}</td>
                 <td>{{ source.last_jobs_fetched_count }}</td>
                 <td>
-                  <form method="post" action="/sources/{{ source.id }}/run" class="inline-form">
-                    <input type="hidden" name="next_url" value="/sources">
-                    <button class="button button-secondary" type="submit">Run ingestion</button>
-                  </form>
+                  <div class="actions-stack">
+                    <a class="button button-secondary" href="/sources/{{ source.id }}/edit">Edit</a>
+                    <a class="button button-danger" href="/sources/{{ source.id }}/delete">Delete</a>
+                    {% if source.is_active %}
+                      <form method="post" action="/sources/{{ source.id }}/run" class="inline-form">
+                        <input type="hidden" name="next_url" value="/sources">
+                        <button class="button button-secondary" type="submit">Run ingestion</button>
+                      </form>
+                    {% else %}
+                      <span class="muted">Inactive — cannot run</span>
+                    {% endif %}
+                  </div>
                 </td>
               </tr>
             {% endfor %}

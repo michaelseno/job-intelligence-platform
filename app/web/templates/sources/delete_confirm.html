@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Delete source · Sources{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Delete source', 'Review the impact before removing this source from active configuration.') }}
+
+  <section class="panel panel-narrow">
+    <p>You are about to delete <strong>{{ source.name }}</strong>.</p>
+
+    <div class="callout callout-danger">
+      <strong>Warning</strong>
+      <p>Deleting a source removes it from active configuration, hides it from default source lists and filters, and prevents future ingestion runs. Historical jobs and run records are preserved.</p>
+    </div>
+
+    <div class="import-summary-grid">
+      {{ ui.stat_card('Runs', impact_summary.run_count, 'default') }}
+      {{ ui.stat_card('Linked jobs', impact_summary.linked_job_count, 'default') }}
+      {{ ui.stat_card('Tracked jobs', impact_summary.tracked_job_count, 'default') }}
+    </div>
+
+    <div class="stack-list delete-impact-copy">
+      {% if impact_summary.has_run_history %}
+        <p>This source has existing history that will remain visible in historical views.</p>
+      {% else %}
+        <p>No run history found.</p>
+      {% endif %}
+
+      {% if impact_summary.has_linked_jobs %}
+        <p>Jobs already linked to this source will keep their historical source reference.</p>
+      {% else %}
+        <p>No linked jobs found.</p>
+      {% endif %}
+
+      {% if impact_summary.tracked_job_count %}
+        <p>Tracked jobs linked to this source are preserved, but the source itself cannot be restored from this flow.</p>
+      {% endif %}
+    </div>
+
+    <form method="post" action="/sources/{{ source.id }}/delete" class="button-row button-row-wrap">
+      <button class="button button-danger" type="submit">Delete source</button>
+      <a class="button button-secondary" href="/sources/{{ source.id }}">Cancel</a>
+    </form>
+  </section>
+{% endblock %}

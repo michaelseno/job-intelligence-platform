@@ -142,3 +142,75 @@ def test_jobs_api_treats_empty_source_filter_as_unset_and_keeps_integer_filterin
 
     invalid_filter_response = client.get("/jobs?source_id=abc")
     assert invalid_filter_response.status_code == 422
+
+
+def test_source_patch_delete_and_delete_impact_flow(client):
+    create_response = client.post(
+        "/sources",
+        json={
+            "name": "Editable Source",
+            "source_type": "greenhouse",
+            "base_url": "https://boards.greenhouse.io/editable-source",
+            "external_identifier": "editable-source",
+            "company_name": "Editable",
+        },
+    )
+    assert create_response.status_code == 201
+    source_id = create_response.json()["id"]
+
+    patch_response = client.patch(f"/sources/{source_id}", json={"notes": "Updated", "is_active": False})
+    assert patch_response.status_code == 200
+    assert patch_response.json()["source"]["notes"] == "Updated"
+    assert patch_response.json()["source"]["is_active"] is False
+
+    impact_response = client.get(f"/sources/{source_id}/delete-impact")
+    assert impact_response.status_code == 200
+    assert impact_response.json()["source_id"] == source_id
+    assert impact_response.json()["run_count"] == 0
+
+    delete_response = client.delete(f"/sources/{source_id}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+    assert delete_response.json()["source_id"] == source_id
+
+    list_response = client.get("/sources")
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+
+    detail_response = client.get(f"/sources/{source_id}")
+    assert detail_response.status_code == 404
+
+    deleted_patch_response = client.patch(f"/sources/{source_id}", json={"notes": "Should fail"})
+    assert deleted_patch_response.status_code == 404
+
+
+def test_deleted_sources_are_removed_from_html_filters_and_inactive_sources_cannot_run(client):
+    create_response = client.post(
+        "/sources",
+        json={
+            "name": "Filter Source",
+            "source_type": "greenhouse",
+            "base_url": "https://boards.greenhouse.io/filter-source",
+            "external_identifier": "filter-source",
+            "company_name": "Filterable",
+        },
+    )
+    assert create_response.status_code == 201
+    source_id = create_response.json()["id"]
+
+    patch_response = client.patch(f"/sources/{source_id}", json={"is_active": False})
+    assert patch_response.status_code == 200
+
+    run_response = client.post(f"/sources/{source_id}/run")
+    assert run_response.status_code == 409
+
+    jobs_response = client.get("/jobs", headers={"accept": "text/html"})
+    assert jobs_response.status_code == 200
+    assert "Filter Source" in jobs_response.text
+
+    delete_response = client.delete(f"/sources/{source_id}")
+    assert delete_response.status_code == 200
+
+    filtered_jobs_response = client.get("/jobs", headers={"accept": "text/html"})
+    assert filtered_jobs_response.status_code == 200
+    assert "Filter Source" not in filtered_jobs_response.text

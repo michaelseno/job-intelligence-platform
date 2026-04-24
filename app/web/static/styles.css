@@ -48,6 +48,7 @@ button, input, select, textarea { font: inherit; }
 
 .panel, .stat-card, .empty-state, .alert, .job-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 .panel { padding: 1.25rem; margin-bottom: 1.25rem; }
+.panel-narrow { max-width: 52rem; }
 .panel__header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; margin-bottom: 1rem; }
 
 .button {
@@ -59,6 +60,7 @@ button, input, select, textarea { font: inherit; }
 }
 .button-primary { background: var(--primary); color: #fff; }
 .button-secondary { background: var(--surface); border-color: var(--border); color: var(--text); }
+.button-danger { background: rgba(181,55,55,.08); border-color: rgba(181,55,55,.28); color: var(--rejected); }
 .button[disabled] { opacity: .55; cursor: not-allowed; }
 
 .alert { padding: .9rem 1rem; margin-bottom: 1rem; }
@@ -75,6 +77,8 @@ button, input, select, textarea { font: inherit; }
 .badge-bucket-rejected, .badge-health-error, .badge-health-failed, .badge-health-invalid { background: rgba(181,55,55,.12); color: var(--rejected); }
 .badge-tracking-saved, .badge-tracking-applied, .badge-tracking-interview, .badge-tracking-offer, .badge-tracking-rejected { background: rgba(91,75,211,.12); color: var(--tracking); }
 .badge-health-success, .badge-health-created { background: rgba(31,143,95,.12); color: var(--matched); }
+.badge-status-active { background: rgba(31,143,95,.12); color: var(--matched); }
+.badge-status-inactive { background: var(--surface-muted); color: var(--text-muted); }
 
 .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; margin-bottom: 1.25rem; }
 .stat-card { padding: 1rem; }
@@ -127,7 +131,9 @@ thead th { border-top: 0; color: var(--text-muted); font-size: .84rem; text-tran
 .callout, blockquote, .support-note { border-radius: 12px; padding: .9rem 1rem; }
 .callout-warning { background: rgba(166,106,0,.1); border: 1px solid rgba(166,106,0,.22); }
 .callout-info, .support-note { background: rgba(49,87,213,.08); border: 1px solid rgba(49,87,213,.14); }
+.callout-danger { background: rgba(181,55,55,.08); border: 1px solid rgba(181,55,55,.16); }
 blockquote { margin: .8rem 0 0; background: var(--surface-muted); border-left: 4px solid var(--primary); }
+.delete-impact-copy p { margin: 0 0 .75rem; }
 
 .job-summary-grid, .import-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
 .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); font-size: .8rem; }

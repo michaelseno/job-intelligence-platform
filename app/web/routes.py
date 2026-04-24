@@ -28,9 +28,12 @@ from app.schemas import (
     JobResponse,
     ReminderResponse,
     SourceCreateRequest,
+    SourceDeleteImpactResponse,
+    SourceDeleteResponse,
     SourceImportResponse,
     SourceResponse,
     SourceRunResponse,
+    SourceUpdateRequest,
     TrackingStatusRequest,
 )
 from app.web.dependencies import get_registry
@@ -240,6 +243,32 @@ def serialize_job(job: JobPosting) -> JobResponse:
     return JobResponse.model_validate(job)
 
 
+def build_source_form_data(source: Source | None = None, form_data: dict[str, Any] | None = None) -> dict[str, Any]:
+    if form_data is not None:
+        return form_data
+    if source is None:
+        return {
+            "name": "",
+            "source_type": "greenhouse",
+            "company_name": "",
+            "base_url": "",
+            "external_identifier": "",
+            "adapter_key": "",
+            "notes": "",
+            "is_active": True,
+        }
+    return {
+        "name": source.name,
+        "source_type": source.source_type,
+        "company_name": source.company_name or "",
+        "base_url": source.base_url,
+        "external_identifier": source.external_identifier or "",
+        "adapter_key": source.adapter_key or "",
+        "notes": source.notes or "",
+        "is_active": source.is_active,
+    }
+
+
 def build_source_page_context(
     request: Request,
     session: Session,
@@ -258,19 +287,45 @@ def build_source_page_context(
         "active_tab": active_tab,
         "sources": sources,
         "source_type_options": SOURCE_TYPE_HELP,
-        "form_data": form_data or {
-            "name": "",
-            "source_type": "greenhouse",
-            "company_name": "",
-            "base_url": "",
-            "external_identifier": "",
-            "adapter_key": "",
-            "notes": "",
-            "is_active": True,
-        },
+        "form_data": build_source_form_data(form_data=form_data),
         "form_errors": form_errors or {},
         "import_result": import_result,
     }
+
+
+def build_source_form_context(source: Source, form_data: dict[str, Any] | None = None, form_errors: dict[str, list[str]] | None = None) -> dict[str, Any]:
+    return {
+        "page_key": "sources",
+        "source": source,
+        "source_type_options": SOURCE_TYPE_HELP,
+        "form_data": build_source_form_data(source, form_data),
+        "form_errors": form_errors or {},
+    }
+
+
+async def parse_source_form(request: Request) -> tuple[dict[str, Any], SourceCreateRequest]:
+    form = await request.form()
+    form_data = {
+        "name": str(form.get("name", "")),
+        "source_type": str(form.get("source_type", "greenhouse")),
+        "company_name": str(form.get("company_name", "")),
+        "base_url": str(form.get("base_url", "")),
+        "external_identifier": str(form.get("external_identifier", "")),
+        "adapter_key": str(form.get("adapter_key", "")),
+        "notes": str(form.get("notes", "")),
+        "is_active": form.get("is_active") == "on",
+    }
+    payload = SourceCreateRequest(
+        name=form_data["name"],
+        source_type=form_data["source_type"],
+        company_name=form_data["company_name"] or None,
+        base_url=form_data["base_url"],
+        external_identifier=form_data["external_identifier"] or None,
+        adapter_key=form_data["adapter_key"] or None,
+        notes=form_data["notes"] or None,
+        is_active=form_data["is_active"],
+    )
+    return form_data, payload
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -278,7 +333,7 @@ def build_source_page_context(
 def dashboard(request: Request, session: Session = Depends(get_session_dependency)):
     jobs = list(session.scalars(select(JobPosting)))
     reminders = list(session.scalars(select(Reminder).where(Reminder.status == "pending").order_by(Reminder.due_at.asc())))
-    sources = list(session.scalars(select(Source).order_by(Source.name.asc())))
+    sources = list(session.scalars(select(Source).where(Source.deleted_at.is_(None)).order_by(Source.name.asc())))
     if not wants_html(request):
         return {
             "matched_count": sum(1 for job in jobs if job.latest_bucket == "matched"),
@@ -350,27 +405,7 @@ async def create_source(
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    form = await request.form()
-    form_data = {
-        "name": str(form.get("name", "")),
-        "source_type": str(form.get("source_type", "greenhouse")),
-        "company_name": str(form.get("company_name", "")),
-        "base_url": str(form.get("base_url", "")),
-        "external_identifier": str(form.get("external_identifier", "")),
-        "adapter_key": str(form.get("adapter_key", "")),
-        "notes": str(form.get("notes", "")),
-        "is_active": form.get("is_active") == "on",
-    }
-    payload = SourceCreateRequest(
-        name=form_data["name"],
-        source_type=form_data["source_type"],
-        company_name=form_data["company_name"] or None,
-        base_url=form_data["base_url"],
-        external_identifier=form_data["external_identifier"] or None,
-        adapter_key=form_data["adapter_key"] or None,
-        notes=form_data["notes"] or None,
-        is_active=form_data["is_active"],
-    )
+    form_data, payload = await parse_source_form(request)
     validation = service.validate(payload)
     if not validation.valid:
         return render(
@@ -389,6 +424,26 @@ async def create_source(
         )
     service.create_source(payload)
     return redirect(with_message("/sources", "success", "Source created. Greenhouse and Lever workflows are ready for ingestion."))
+
+
+@router.patch("/sources/{source_id}")
+async def update_source(
+    source_id: int,
+    request: Request,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    service = SourceService(session, registry)
+    payload = SourceUpdateRequest(**(await request.json()))
+    source, validation = service.update_source(source_id, payload)
+    if source is None and validation is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    if validation is not None and not validation.valid:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "Source update failed.", "errors": map_source_errors(validation.errors)},
+        )
+    return {"source": SourceResponse.model_validate(source)}
 
 
 @router.post("/sources/import")
@@ -436,6 +491,116 @@ def get_source_detail(
     return {"source": SourceResponse.model_validate(source), "runs": [SourceRunResponse.model_validate(run) for run in runs]}
 
 
+@router.get("/sources/{source_id}/delete-impact")
+def get_source_delete_impact(
+    source_id: int,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    service = SourceService(session, registry)
+    source = service.get_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    impact = service.get_delete_impact(source_id)
+    if impact is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    return SourceDeleteImpactResponse(
+        source_id=source.id,
+        source_name=source.name,
+        run_count=impact.run_count,
+        linked_job_count=impact.linked_job_count,
+        tracked_job_count=impact.tracked_job_count,
+        has_run_history=impact.has_run_history,
+        has_linked_jobs=impact.has_linked_jobs,
+    )
+
+
+@router.delete("/sources/{source_id}")
+def delete_source(
+    source_id: int,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    source = SourceService(session, registry).delete_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    return SourceDeleteResponse(deleted=True, source_id=source.id, deleted_at=source.deleted_at)
+
+
+@router.get("/sources/{source_id}/edit")
+def edit_source_form(
+    request: Request,
+    source_id: int,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    service = SourceService(session, registry)
+    source = service.get_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    return render(request, session, "sources/edit.html", build_source_form_context(source))
+
+
+@router.post("/sources/{source_id}/edit")
+async def edit_source_submit(
+    request: Request,
+    source_id: int,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    service = SourceService(session, registry)
+    source = service.get_source(source_id)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    form_data, payload = await parse_source_form(request)
+    validation = service.validate(payload, exclude_source_id=source_id)
+    if not validation.valid:
+        return render(
+            request,
+            session,
+            "sources/edit.html",
+            build_source_form_context(source, form_data=form_data, form_errors=map_source_errors(validation.errors)),
+            status_code=400,
+        )
+    updated, _ = service.update_source(source_id, SourceUpdateRequest(**payload.model_dump()))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    return redirect(with_message(f"/sources/{source_id}", "success", "Source updated successfully."))
+
+
+@router.get("/sources/{source_id}/delete")
+def delete_source_form(
+    request: Request,
+    source_id: int,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    service = SourceService(session, registry)
+    source = service.get_source(source_id)
+    impact_summary = service.get_delete_impact(source_id)
+    if source is None or impact_summary is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    return render(
+        request,
+        session,
+        "sources/delete_confirm.html",
+        {"page_key": "sources", "source": source, "impact_summary": impact_summary},
+    )
+
+
+@router.post("/sources/{source_id}/delete")
+def delete_source_submit(
+    request: Request,
+    source_id: int,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    deleted = SourceService(session, registry).delete_source(source_id)
+    if deleted is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+    return redirect(with_message("/sources", "success", "Source deleted. It has been removed from active configuration and future ingestion."))
+
+
 @router.post("/sources/{source_id}/run")
 def run_source(
     request: Request,
@@ -445,7 +610,10 @@ def run_source(
     registry: SourceAdapterRegistry = Depends(get_registry),
 ):
     source_service = SourceService(session, registry)
-    source = source_service.get_source(source_id)
+    try:
+        source = source_service.get_runnable_source(source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if source is None:
         raise HTTPException(status_code=404, detail="Source not found.")
     run = IngestionOrchestrator(session, registry).run_source(source)
@@ -478,7 +646,7 @@ def list_jobs(
     decisions = get_current_decision_map(session, jobs)
     reminder_map = get_pending_reminder_map(session)
     job_cards = [to_job_card(job, primary_sources.get(job.id), decisions.get(job.id), reminder_map.get(job.id)) for job in jobs]
-    sources = list(session.scalars(select(Source).order_by(Source.name.asc())))
+    sources = list(session.scalars(select(Source).where(Source.deleted_at.is_(None)).order_by(Source.name.asc())))
     return render(
         request,
         session,

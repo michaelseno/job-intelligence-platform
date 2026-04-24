@@ -11,7 +11,7 @@ class OperationsService:
         self.session = session
 
     def list_source_health(self) -> list[Source]:
-        return list(self.session.scalars(select(Source).order_by(Source.name.asc())))
+        return list(self.session.scalars(select(Source).where(Source.deleted_at.is_(None)).order_by(Source.name.asc())))
 
     def list_runs(self) -> list[SourceRun]:
         return list(self.session.scalars(select(SourceRun).order_by(SourceRun.started_at.desc())))
