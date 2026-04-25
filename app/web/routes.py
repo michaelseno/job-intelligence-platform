@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import or_, select
@@ -15,8 +15,10 @@ from sqlalchemy.orm import Session
 
 from app.adapters.base.registry import SourceAdapterRegistry
 from app.domain.ingestion import IngestionOrchestrator
+from app.domain.job_visibility import apply_visible_jobs, visible_job_predicate
 from app.domain.notifications import NotificationService
 from app.domain.operations import OperationsService
+from app.domain.source_cleanup import run_source_delete_cleanup
 from app.domain.sources import SourceService
 from app.domain.tracking import TrackingService, VALID_TRACKING_STATUSES
 from app.persistence.db import get_db_session
@@ -39,10 +41,10 @@ from app.schemas import (
 from app.web.dependencies import get_registry
 
 router = APIRouter()
-_templates_dir = Path(__file__).resolve().parent.parent / "templates"
-if not _templates_dir.exists():
-    _templates_dir = Path(__file__).resolve().parent / "templates"
-templates = Jinja2Templates(directory=str(_templates_dir))
+_app_templates_dir = Path(__file__).resolve().parent.parent / "templates"
+_web_templates_dir = Path(__file__).resolve().parent / "templates"
+_template_dirs = [path for path in (_app_templates_dir, _web_templates_dir) if path.exists()]
+templates = Jinja2Templates(directory=[str(path) for path in _template_dirs])
 INT_QUERY_ADAPTER = TypeAdapter(int)
 
 SOURCE_TYPE_HELP = {
@@ -62,7 +64,7 @@ def wants_html(request: Request) -> bool:
     lowered = accept.lower()
 
     if not lowered or lowered == "*/*":
-        return True
+        return False
 
     if "text/html" in lowered or "application/xhtml+xml" in lowered:
         return True
@@ -187,7 +189,12 @@ def get_current_decision_map(session: Session, jobs: list[JobPosting]) -> dict[i
 
 
 def get_pending_reminder_map(session: Session) -> dict[int, Reminder]:
-    reminders = session.scalars(select(Reminder).where(Reminder.status == "pending").order_by(Reminder.due_at.asc()))
+    reminders = session.scalars(
+        select(Reminder)
+        .join(JobPosting, JobPosting.id == Reminder.job_posting_id)
+        .where(Reminder.status == "pending", visible_job_predicate())
+        .order_by(Reminder.due_at.asc())
+    )
     result: dict[int, Reminder] = {}
     for reminder in reminders:
         result.setdefault(reminder.job_posting_id, reminder)
@@ -202,6 +209,7 @@ def to_job_card(job: JobPosting, source: Source | None, decision: JobDecision | 
         "company_name": job.company_name or source.name if source else "Unknown company",
         "source_name": source.name if source else "Unknown source",
         "source_id": source.id if source else None,
+        "source_deleted": bool(source and source.deleted_at is not None),
         "job_url": job.job_url,
         "location_text": job.location_text,
         "remote_type": job.remote_type,
@@ -218,7 +226,7 @@ def to_job_card(job: JobPosting, source: Source | None, decision: JobDecision | 
 
 
 def build_jobs_query(bucket: str | None, tracking_status: str | None, source_id: int | None, search: str | None):
-    query = select(JobPosting)
+    query = apply_visible_jobs(select(JobPosting))
     if bucket:
         query = query.where(JobPosting.latest_bucket == bucket)
     if tracking_status:
@@ -244,7 +252,11 @@ def filter_jobs_by_source(session: Session, jobs: list[JobPosting], source_id: i
         return jobs
     filtered: list[JobPosting] = []
     for job in jobs:
-        link = session.scalar(select(JobSourceLink).where(JobSourceLink.job_posting_id == job.id, JobSourceLink.source_id == source_id))
+        link = session.scalar(
+            select(JobSourceLink)
+            .join(Source, Source.id == JobSourceLink.source_id)
+            .where(JobSourceLink.job_posting_id == job.id, JobSourceLink.source_id == source_id, Source.deleted_at.is_(None))
+        )
         if link:
             filtered.append(job)
     return filtered
@@ -252,6 +264,10 @@ def filter_jobs_by_source(session: Session, jobs: list[JobPosting], source_id: i
 
 def serialize_job(job: JobPosting) -> JobResponse:
     return JobResponse.model_validate(job)
+
+
+def enqueue_source_delete_cleanup(background_tasks: BackgroundTasks, source_id: int) -> None:
+    background_tasks.add_task(run_source_delete_cleanup, source_id)
 
 
 def build_source_form_data(source: Source | None = None, form_data: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -342,11 +358,18 @@ async def parse_source_form(request: Request) -> tuple[dict[str, Any], SourceCre
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, session: Session = Depends(get_session_dependency)):
-    jobs = list(session.scalars(select(JobPosting)))
-    reminders = list(session.scalars(select(Reminder).where(Reminder.status == "pending").order_by(Reminder.due_at.asc())))
+    jobs = list(session.scalars(apply_visible_jobs(select(JobPosting))))
+    reminders = list(
+        session.scalars(
+            select(Reminder)
+            .join(JobPosting, JobPosting.id == Reminder.job_posting_id)
+            .where(Reminder.status == "pending", visible_job_predicate())
+            .order_by(Reminder.due_at.asc())
+        )
+    )
     sources = list(session.scalars(select(Source).where(Source.deleted_at.is_(None)).order_by(Source.name.asc())))
     if not wants_html(request):
-        return {
+        return JSONResponse({
             "matched_count": sum(1 for job in jobs if job.latest_bucket == "matched"),
             "review_count": sum(1 for job in jobs if job.latest_bucket == "review"),
             "rejected_count": sum(1 for job in jobs if job.latest_bucket == "rejected"),
@@ -354,7 +377,7 @@ def dashboard(request: Request, session: Session = Depends(get_session_dependenc
             "applied_follow_ups": sum(1 for job in jobs if job.tracking_status == "applied"),
             "pending_reminders": len(reminders),
             "source_count": len(sources),
-        }
+        })
 
     decisions = get_current_decision_map(session, jobs)
     primary_sources = get_primary_source_map(session, jobs)
@@ -381,7 +404,11 @@ def dashboard(request: Request, session: Session = Depends(get_session_dependenc
             "matched_jobs": matched_jobs,
             "review_jobs": review_jobs,
             "reminders": reminders[:6],
-            "reminder_jobs": {job.id: to_job_card(job, primary_sources.get(job.id), decisions.get(job.id), reminder_map.get(job.id)) for job in jobs if job.id in reminder_map},
+            "reminder_jobs": [
+                to_job_card(job, primary_sources.get(job.id), decisions.get(job.id), reminder_map.get(job.id))
+                for job in jobs
+                if job.id in reminder_map
+            ],
             "source_warnings": source_warnings[:6],
             "sources": sources,
             "latest_digest": latest_digest,
@@ -529,13 +556,15 @@ def get_source_delete_impact(
 @router.delete("/sources/{source_id}")
 def delete_source(
     source_id: int,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session_dependency),
     registry: SourceAdapterRegistry = Depends(get_registry),
 ):
     source = SourceService(session, registry).delete_source(source_id)
     if source is None:
         raise HTTPException(status_code=404, detail="Source not found.")
-    return SourceDeleteResponse(deleted=True, source_id=source.id, deleted_at=source.deleted_at)
+    enqueue_source_delete_cleanup(background_tasks, source.id)
+    return SourceDeleteResponse(deleted=True, source_id=source.id, deleted_at=source.deleted_at, cleanup_queued=True, cleanup_status="queued")
 
 
 @router.get("/sources/{source_id}/edit")
@@ -603,13 +632,15 @@ def delete_source_form(
 def delete_source_submit(
     request: Request,
     source_id: int,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session_dependency),
     registry: SourceAdapterRegistry = Depends(get_registry),
 ):
     deleted = SourceService(session, registry).delete_source(source_id)
     if deleted is None:
         raise HTTPException(status_code=404, detail="Source not found.")
-    return redirect(with_message("/sources", "success", "Source deleted. It has been removed from active configuration and future ingestion."))
+    enqueue_source_delete_cleanup(background_tasks, deleted.id)
+    return redirect(with_message("/sources", "success", "Source deleted. Job cleanup has started; non-retained jobs from this source are hidden from Dashboard and Jobs now. Matched active jobs may remain."))
 
 
 @router.post("/sources/{source_id}/run")
@@ -679,7 +710,7 @@ def list_jobs(
 
 @router.get("/jobs/{job_id}")
 def get_job(request: Request, job_id: int, session: Session = Depends(get_session_dependency)):
-    job = session.get(JobPosting, job_id)
+    job = session.scalar(apply_visible_jobs(select(JobPosting)).where(JobPosting.id == job_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     decision = None
@@ -766,7 +797,7 @@ def keep_job(
     next_url: str | None = Form(default=None),
     session: Session = Depends(get_session_dependency),
 ):
-    job = session.get(JobPosting, job_id)
+    job = session.scalar(apply_visible_jobs(select(JobPosting)).where(JobPosting.id == job_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
     updated = TrackingService(session).keep_job(job)
@@ -777,7 +808,7 @@ def keep_job(
 
 @router.post("/jobs/{job_id}/tracking-status")
 async def update_tracking_status(job_id: int, request: Request, session: Session = Depends(get_session_dependency)):
-    job = session.get(JobPosting, job_id)
+    job = session.scalar(apply_visible_jobs(select(JobPosting)).where(JobPosting.id == job_id))
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found.")
 
@@ -864,7 +895,7 @@ def tracking_page(
     session: Session = Depends(get_session_dependency),
 ):
     effective_status = tracking_status or "saved"
-    query = select(JobPosting).where(JobPosting.tracking_status.is_not(None))
+    query = apply_visible_jobs(select(JobPosting)).where(JobPosting.tracking_status.is_not(None))
     if effective_status and effective_status != "all":
         query = query.where(JobPosting.tracking_status == effective_status)
     if search:
@@ -917,7 +948,7 @@ def latest_digest(request: Request, session: Session = Depends(get_session_depen
         return None
     items = list(session.scalars(select(DigestItem).where(DigestItem.digest_id == digest.id)))
     if wants_html(request):
-        jobs = {job.id: job for job in session.scalars(select(JobPosting).where(JobPosting.id.in_([item.job_posting_id for item in items])))} if items else {}
+        jobs = {job.id: job for job in session.scalars(apply_visible_jobs(select(JobPosting)).where(JobPosting.id.in_([item.job_posting_id for item in items])))} if items else {}
         primary_sources = get_primary_source_map(session, list(jobs.values()))
         decisions = get_current_decision_map(session, list(jobs.values()))
         grouped_items: dict[str, list[dict[str, Any]]] = {"matched": [], "review": []}
@@ -927,6 +958,9 @@ def latest_digest(request: Request, session: Session = Depends(get_session_depen
                 continue
             grouped_items[item.bucket].append({"item": item, "job": to_job_card(job, primary_sources.get(job.id), decisions.get(job.id))})
         return render(request, session, "notifications/digest.html", {"page_key": "digest", "digest": digest, "grouped_items": grouped_items})
+    visible_item_job_ids = set(
+        session.scalars(apply_visible_jobs(select(JobPosting.id)).where(JobPosting.id.in_([item.job_posting_id for item in items])))
+    ) if items else set()
     return DigestResponse(
         id=digest.id,
         digest_date=digest.digest_date,
@@ -934,7 +968,7 @@ def latest_digest(request: Request, session: Session = Depends(get_session_depen
         generated_at=digest.generated_at,
         delivery_channel=digest.delivery_channel,
         content_summary=digest.content_summary,
-        items=[DigestItemResponse(job_posting_id=item.job_posting_id, bucket=item.bucket, reason=item.reason) for item in items],
+        items=[DigestItemResponse(job_posting_id=item.job_posting_id, bucket=item.bucket, reason=item.reason) for item in items if item.job_posting_id in visible_item_job_ids],
     )
 
 
@@ -948,7 +982,14 @@ def generate_reminders(request: Request, session: Session = Depends(get_session_
 
 @router.get("/reminders")
 def list_reminders(request: Request, session: Session = Depends(get_session_dependency)):
-    reminders = list(session.scalars(select(Reminder).order_by(Reminder.due_at.asc())))
+    reminders = list(
+        session.scalars(
+            select(Reminder)
+            .join(JobPosting, JobPosting.id == Reminder.job_posting_id)
+            .where(visible_job_predicate())
+            .order_by(Reminder.due_at.asc())
+        )
+    )
     if not wants_html(request):
         return [ReminderResponse.model_validate(reminder) for reminder in reminders]
     jobs = {job.id: job for job in session.scalars(select(JobPosting).where(JobPosting.id.in_([reminder.job_posting_id for reminder in reminders])))} if reminders else {}

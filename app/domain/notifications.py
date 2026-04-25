@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.config.settings import get_settings
 from app.domain.common import utcnow
+from app.domain.job_visibility import apply_visible_jobs, visible_job_predicate
 from app.persistence.models import Digest, DigestItem, JobDecision, JobPosting, JobTrackingEvent, Reminder
 
 
@@ -36,11 +37,14 @@ class NotificationService:
         window_start = prior.generated_at if prior else now - timedelta(days=1)
         decisions = list(
             self.session.scalars(
-                select(JobDecision).where(
+                select(JobDecision)
+                .join(JobPosting, JobPosting.id == JobDecision.job_posting_id)
+                .where(
                     JobDecision.is_current.is_(True),
                     JobDecision.bucket.in_(["matched", "review"]),
                     JobDecision.created_at >= window_start,
                     JobDecision.created_at <= now,
+                    visible_job_predicate(),
                 )
             )
         )
@@ -64,7 +68,7 @@ class NotificationService:
         now = utcnow()
         jobs = list(
             self.session.scalars(
-                select(JobPosting).where(JobPosting.tracking_status.in_(["saved", "applied"]))
+                apply_visible_jobs(select(JobPosting)).where(JobPosting.tracking_status.in_(["saved", "applied"]))
             )
         )
         reminders: list[Reminder] = []

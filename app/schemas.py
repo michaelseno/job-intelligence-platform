@@ -77,6 +77,8 @@ class SourceDeleteResponse(BaseModel):
     deleted: bool
     source_id: int
     deleted_at: datetime
+    cleanup_queued: bool = False
+    cleanup_status: str | None = None
 
 
 class SourceRunResponse(BaseModel):

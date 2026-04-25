@@ -91,6 +91,7 @@
               <li class="stack-item stack-item-start">
                 <div>
                   <strong>{{ source.name if source else 'Source #' ~ link.source_id }}</strong>
+                  {% if source and source.deleted_at %}<span class="badge badge-muted">Deleted source</span>{% endif %}
                   <p class="muted">External job id: {{ link.external_job_id or '—' }} · Last seen {{ format_dt(link.last_seen_at) }}</p>
                 </div>
                 <a href="{{ link.source_job_url }}" target="_blank" rel="noreferrer">Open posting</a>

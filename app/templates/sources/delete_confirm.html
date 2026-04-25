@@ -7,30 +7,44 @@
   <div>
     <div class="eyebrow">Confirmation</div>
     <h2>Delete source</h2>
-    <p>Review the historical impact before deleting <strong>{{ source.name }}</strong>.</p>
+    <p>Review cleanup impact before removing this source.</p>
   </div>
 </section>
-<section class="content-grid content-grid--2">
-  <article class="surface">
+<section class="panel panel-narrow surface">
+  <p>You are about to delete <strong>{{ source.name }}</strong>.</p>
+
+  <div class="callout callout-danger alert alert--warning" role="status">
+    <strong>This permanently removes most jobs from this source</strong>
+    <p>Deleting this source removes it from source management and future ingestion immediately. Jobs linked to this source will be cleaned up in the background. Only jobs that are both Matched and Active will be retained.</p>
+  </div>
+
+  <div class="content-grid content-grid--3 import-summary-grid">
+    <article class="stat-card"><span>Runs</span><strong>{{ impact_summary.run_count }}</strong></article>
+    <article class="stat-card"><span>Linked jobs</span><strong>{{ impact_summary.linked_job_count }}</strong></article>
+    <article class="stat-card"><span>Tracked jobs</span><strong>{{ impact_summary.tracked_job_count }}</strong></article>
+  </div>
+
+  <div class="stack-list delete-impact-copy">
     <div class="section-heading"><h3>Impact summary</h3></div>
-    <dl class="detail-list">
-      <div><dt>Run history</dt><dd>{{ impact_summary.run_count }}</dd></div>
-      <div><dt>Linked jobs</dt><dd>{{ impact_summary.linked_job_count }}</dd></div>
-      <div><dt>Tracked jobs</dt><dd>{{ impact_summary.tracked_job_count }}</dd></div>
-    </dl>
-    {% if impact_summary.has_linked_jobs or impact_summary.has_run_history %}
-      <div class="alert alert--warning">Historical jobs and run references remain important context for downstream review.</div>
+    {% if impact_summary.has_linked_jobs %}
+      <p>{{ impact_summary.linked_job_count }} linked job(s) will be removed from Jobs, Dashboard, reminders, and digests immediately after deletion unless they are both Matched and Active. Physical cleanup finishes in the background.</p>
+      <p>Matched active jobs may remain visible if they match your filters. Their deleted source provenance is historical only and cannot be used for future ingestion.</p>
+    {% else %}
+      <p>No linked jobs found. No job cleanup is needed.</p>
     {% endif %}
-  </article>
-  <article class="surface">
-    <div class="section-heading"><h3>Confirm deletion</h3></div>
-    <form method="post" action="/sources/{{ source.id }}/delete" class="stack-form">
-      <p class="muted">This destructive action requires confirmation and names the affected source explicitly.</p>
-      <div class="form-footer form-footer--split">
-        <a class="btn btn--ghost" href="/sources/{{ source.id }}">Cancel</a>
-        <button class="btn btn--danger" type="submit">Delete source</button>
-      </div>
-    </form>
-  </article>
+
+    {% if impact_summary.has_run_history %}
+      <p>Run records remain available for operational history, but this source will no longer be available in active source lists, filters, or run actions.</p>
+    {% else %}
+      <p>No run history found.</p>
+    {% endif %}
+
+    <p>Tracking status, reminders, manual keep, and digest inclusion do not preserve a job unless it is also Matched and Active.</p>
+  </div>
+
+  <form method="post" action="/sources/{{ source.id }}/delete" class="button-row button-row-wrap form-footer form-footer--split">
+    <a class="btn btn--ghost" href="/sources/{{ source.id }}">Cancel</a>
+    <button class="btn btn--danger" type="submit">Delete source</button>
+  </form>
 </section>
 {% endblock %}
