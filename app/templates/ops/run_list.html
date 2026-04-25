@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Runs · Job Intelligence{% endblock %}
+{% block page_title %}Run history{% endblock %}
+{% block content %}
+<section class="page-header"><div><div class="eyebrow">Operations</div><h2>Run history</h2><p>Use structured run summaries instead of dense debugging walls.</p></div><div class="page-actions"><a class="btn btn--secondary" href="/source-health">Source health</a></div></section>
+<section class="surface">
+  {% if runs %}
+    <div class="table-wrap"><table><thead><tr><th>Run</th><th>Status</th><th>Source</th><th>Started</th><th>Outcome</th></tr></thead><tbody>{% for run in runs %}<tr><td><a class="table-link" href="/ops/runs/{{ run.id }}">Run #{{ run.id }}</a></td><td>{{ ui.badge(run.status|title, ui.tone_from_status(run.status)) }}</td><td>{% for source in sources %}{% if source.id == run.source_id %}{{ source.name }}{% endif %}{% endfor %}</td><td>{{ format_dt(run.started_at) }}</td><td>{{ run.jobs_fetched_count|default(0) }} fetched · {{ run.warning_count|default(0) }} warnings</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}
+    {{ ui.empty_state('No runs recorded', 'Runs will appear after a source ingestion completes.') }}
+  {% endif %}
+</section>
+{% endblock %}

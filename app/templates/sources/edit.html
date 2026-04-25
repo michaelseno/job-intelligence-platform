@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Edit {{ source.name }} · Sources{% endblock %}
+{% block page_title %}Edit source{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <div class="eyebrow">Form</div>
+    <h2>Edit source</h2>
+    <p>Update source metadata without changing the existing workflow or terminology.</p>
+  </div>
+</section>
+<section class="surface form-surface">
+  <form method="post" action="/sources/{{ source.id }}/edit" class="stack-form">
+    <label>Name *</label><input name="name" value="{{ form_data.name }}" required>
+    <label>Source type</label>
+    <select name="source_type">{% for key, help_text in source_type_options.items() %}<option value="{{ key }}" {% if form_data.source_type == key %}selected{% endif %}>{{ key|replace('_', ' ')|title }}</option>{% endfor %}</select>
+    <label>Base URL *</label><input name="base_url" type="url" value="{{ form_data.base_url }}" required>
+    <label>External identifier</label><input name="external_identifier" value="{{ form_data.external_identifier }}">
+    <label>Adapter key</label><input name="adapter_key" value="{{ form_data.adapter_key }}">
+    <label>Company name</label><input name="company_name" value="{{ form_data.company_name }}">
+    <label>Notes</label><textarea name="notes" rows="4">{{ form_data.notes }}</textarea>
+    <label class="checkbox-row"><input type="checkbox" name="is_active" value="true" {% if form_data.is_active %}checked{% endif %}> Source is active</label>
+    <div class="form-footer">
+      <a class="btn btn--ghost" href="/sources/{{ source.id }}">Cancel</a>
+      <button class="btn btn--primary" type="submit">Save changes</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

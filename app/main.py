@@ -29,6 +29,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Job Intelligence Platform MVP", lifespan=lifespan)
-static_dir = Path(__file__).resolve().parent / "web" / "static"
+app_dir = Path(__file__).resolve().parent
+static_dir = app_dir / "static"
+if not static_dir.exists():
+    static_dir = app_dir / "web" / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.include_router(router)

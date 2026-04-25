@@ -39,7 +39,10 @@ from app.schemas import (
 from app.web.dependencies import get_registry
 
 router = APIRouter()
-templates = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+_templates_dir = Path(__file__).resolve().parent.parent / "templates"
+if not _templates_dir.exists():
+    _templates_dir = Path(__file__).resolve().parent / "templates"
+templates = Jinja2Templates(directory=str(_templates_dir))
 INT_QUERY_ADAPTER = TypeAdapter(int)
 
 SOURCE_TYPE_HELP = {
@@ -56,7 +59,15 @@ def get_session_dependency():
 
 def wants_html(request: Request) -> bool:
     accept = request.headers.get("accept", "")
-    return "text/html" in accept and "application/json" not in accept
+    lowered = accept.lower()
+
+    if not lowered or lowered == "*/*":
+        return True
+
+    if "text/html" in lowered or "application/xhtml+xml" in lowered:
+        return True
+
+    return "application/json" not in lowered
 
 
 def format_dt(value):

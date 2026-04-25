@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Jobs · Job Intelligence{% endblock %}
+{% block page_title %}Jobs{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <div class="eyebrow">Management table</div>
+    <h2>Job pipeline</h2>
+    <p>Filter, scan, and update job tracking states without leaving the current workflow.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--secondary" href="/tracking">Open tracking queue</a>
+    <a class="btn btn--ghost" href="/jobs">Refresh</a>
+  </div>
+</section>
+
+<section class="surface">
+  <form method="get" class="toolbar" data-clean-empty-query="true">
+    <input type="search" name="search" value="{{ filters.search }}" placeholder="Search title, company, or description">
+    <select name="bucket">
+      <option value="">All buckets</option>
+      {% for value in ['matched', 'review', 'rejected'] %}
+        <option value="{{ value }}" {% if filters.bucket == value %}selected{% endif %}>{{ value|title }}</option>
+      {% endfor %}
+    </select>
+    <select name="tracking_status">
+      <option value="">All tracking states</option>
+      {% for value in tracking_statuses|default([]) %}
+        <option value="{{ value }}" {% if filters.tracking_status == value %}selected{% endif %}>{{ value|replace('_', ' ')|title }}</option>
+      {% endfor %}
+    </select>
+    <select name="source_id">
+      <option value="">All sources</option>
+      {% for source in available_sources %}
+        <option value="{{ source.id }}" {% if filters.source_id|string == source.id|string %}selected{% endif %}>{{ source.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="sort">
+      <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>Newest</option>
+      <option value="score" {% if filters.sort == 'score' %}selected{% endif %}>Highest score</option>
+      <option value="title" {% if filters.sort == 'title' %}selected{% endif %}>Title</option>
+    </select>
+    <button class="btn btn--primary" type="submit">Apply filters</button>
+    <a class="btn btn--ghost" href="/jobs">Reset</a>
+  </form>
+
+  {% if jobs %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Role</th><th>Source</th><th>Status</th><th>Tracking</th><th>Last updated</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+            <tr>
+              <td>
+                <a class="table-link" href="/jobs/{{ job.id }}">{{ job.title }}</a>
+                <div class="muted">{{ job.company_name }} · {{ job.location_text or 'Location not specified' }}</div>
+              </td>
+              <td>{{ job.source_name or 'Unknown source' }}</td>
+              <td>{{ ui.badge(job.bucket|title, ui.tone_from_status(job.bucket)) }}</td>
+              <td>{{ ui.badge((job.tracking_status or 'untracked')|replace('_', ' ')|title, ui.tone_from_status(job.tracking_status)) }}</td>
+              <td>{{ format_dt(job.last_seen_at) if format_dt else job.last_seen_at }}</td>
+              <td>
+                <div class="row-actions">
+                  <a class="btn btn--ghost btn--sm" href="/jobs/{{ job.id }}">Open</a>
+                  <form method="post" action="/jobs/{{ job.id }}/keep?next=/jobs">
+                    <button class="btn btn--secondary btn--sm" type="submit">Keep</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    {{ ui.empty_state('No jobs found', 'Try broadening your filters or run a source to bring in new postings.', '/sources', 'Manage sources') }}
+  {% endif %}
+</section>
+{% endblock %}

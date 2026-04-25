@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Sources · Job Intelligence{% endblock %}
+{% block page_title %}Sources{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <div class="eyebrow">Management table</div>
+    <h2>{{ page_title or 'Sources' }}</h2>
+    <p>{{ page_description or 'Manage ingestion sources, adapters, and operational readiness.' }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--secondary" href="#import-panel">Import CSV</a>
+    <a class="btn btn--primary" href="#create-source">Add source</a>
+  </div>
+</section>
+
+<section class="content-grid content-grid--sources">
+  <article class="surface">
+    <div class="section-heading"><h3>Source inventory</h3><a href="/source-health">Source Health</a></div>
+    {% if sources %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Adapter</th><th>Health</th><th>Last run</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for source in sources %}
+              <tr>
+                <td>
+                  <a class="table-link" href="/sources/{{ source.id }}">{{ source.name }}</a>
+                  <div class="muted">{{ source.base_url }}</div>
+                  {% if not source.is_active %}<div>{{ ui.badge('Inactive', 'warning') }}</div>{% endif %}
+                </td>
+                <td>{{ source.adapter_key or source.source_type }}</td>
+                <td>{{ ui.badge((source.health_state or 'unknown')|title, ui.tone_from_status(source.health_state)) }}</td>
+                <td>{{ format_dt(source.last_run_at) if source.last_run_at else 'Never run' }}</td>
+                <td>
+                  <div class="row-actions row-actions--wrap">
+                    <a class="btn btn--ghost btn--sm" href="/sources/{{ source.id }}">Open</a>
+                    <a class="btn btn--ghost btn--sm" href="/sources/{{ source.id }}/edit">Edit source</a>
+                    <a class="btn btn--ghost btn--sm btn--danger" href="/sources/{{ source.id }}/delete">Delete source</a>
+                    <form method="post" action="/sources/{{ source.id }}/run?next=/sources">
+                      <button class="btn btn--secondary btn--sm" type="submit">Run now</button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      {{ ui.empty_state('No sources configured', 'Create or import a source to start collecting jobs.', '#create-source', 'Add source') }}
+    {% endif %}
+  </article>
+
+  <aside class="stack-panels">
+    <article class="surface" id="create-source">
+      <div class="section-heading"><h3>Add source</h3></div>
+      {% if form_errors %}
+        <div class="alert alert--danger"><strong>Source update failed.</strong> Review the highlighted fields below.</div>
+      {% endif %}
+      <form method="post" action="/sources" class="stack-form">
+        <label>Name *</label>
+        <input name="name" value="{{ form_data.name }}" required>
+        {% if form_errors.name %}<p class="field-error">{{ form_errors.name[0] }}</p>{% endif %}
+        <label>Source type *</label>
+        <select name="source_type">
+          {% for key, help_text in source_type_options.items() %}
+            <option value="{{ key }}" {% if form_data.source_type == key %}selected{% endif %}>{{ key|replace('_', ' ')|title }}</option>
+          {% endfor %}
+        </select>
+        <p class="helper-text">{{ source_type_options.get(form_data.source_type, '') }}</p>
+        <label>Base URL *</label>
+        <input name="base_url" type="url" value="{{ form_data.base_url }}" required>
+        <label>External identifier</label>
+        <input name="external_identifier" value="{{ form_data.external_identifier }}">
+        <label>Adapter key</label>
+        <input name="adapter_key" value="{{ form_data.adapter_key }}">
+        <label>Company name</label>
+        <input name="company_name" value="{{ form_data.company_name }}">
+        <label>Notes</label>
+        <textarea name="notes" rows="3">{{ form_data.notes }}</textarea>
+        <label class="checkbox-row"><input type="checkbox" name="is_active" value="true" {% if form_data.is_active %}checked{% endif %}> Source is active</label>
+        <button class="btn btn--primary" type="submit">Create source</button>
+      </form>
+    </article>
+
+    <article class="surface" id="import-panel">
+      <div class="section-heading"><h3>Import CSV</h3></div>
+      {% if import_result %}<div class="alert alert--success">Imported {{ import_result.created_count|default(0) }} sources.</div>{% endif %}
+      <form method="post" action="/sources/import" enctype="multipart/form-data" class="stack-form">
+        <label>CSV file</label>
+        <input type="file" name="file" accept=".csv,text/csv" required>
+        <button class="btn btn--secondary" type="submit">Import sources</button>
+      </form>
+    </article>
+  </aside>
+</section>
+{% endblock %}

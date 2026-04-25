@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Digest · Job Intelligence{% endblock %}
+{% block page_title %}Digest{% endblock %}
+{% block content %}
+<section class="page-header"><div><div class="eyebrow">Notifications</div><h2>Latest digest</h2><p>Review the newest generated digest with grouped items and calm page framing.</p></div><div class="page-actions"><form method="post" action="/digest/generate?next=/digest/latest"><button class="btn btn--primary" type="submit">Generate digest</button></form></div></section>
+{% if digest %}
+  <section class="stats-grid"><article class="stat-card"><span>Status</span><strong>{{ digest.status|title }}</strong></article><article class="stat-card"><span>Date</span><strong>{{ digest.digest_date }}</strong></article><article class="stat-card"><span>Channel</span><strong>{{ digest.delivery_channel|default('local') }}</strong></article><article class="stat-card"><span>Items</span><strong>{{ digest.items|length }}</strong></article></section>
+  <section class="surface"><p>{{ digest.content_summary or 'No digest summary captured.' }}</p>{% if grouped_items %}<div class="stack-list">{% for bucket, items in grouped_items.items() %}<div class="list-group"><h3>{{ bucket|title }}</h3><ul>{% for item in items %}<li><a href="/jobs/{{ item.job_posting_id }}">Job #{{ item.job_posting_id }}</a> — {{ item.reason }}</li>{% endfor %}</ul></div>{% endfor %}</div>{% endif %}</section>
+{% else %}
+  {{ ui.empty_state('No digest yet', 'Generate a digest to review the current summary of jobs.', None, None) }}
+{% endif %}
+{% endblock %}
