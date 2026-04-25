@@ -32,6 +32,9 @@
       <div><dt>External identifier</dt><dd>{{ source.external_identifier or 'Not set' }}</dd></div>
       <div><dt>Notes</dt><dd>{{ source.notes or 'No notes added.' }}</dd></div>
     </dl>
+    {% if not source.is_active %}
+      <div class="alert alert--warning">This source is inactive and cannot be run until it is reactivated.</div>
+    {% endif %}
   </article>
   <article class="surface">
     <div class="section-heading"><h3>Recent runs</h3></div>

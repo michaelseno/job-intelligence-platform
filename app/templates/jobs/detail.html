@@ -72,20 +72,21 @@
 
 <section class="content-grid content-grid--2">
   <article class="surface">
-    <div class="section-heading"><h3>Source links</h3></div>
+    <div class="section-heading"><h3>Source evidence</h3></div>
     {% if source_links %}
       <div class="stack-list">
         {% for link in source_links %}
           {% set source = sources.get(link.source_id|string) or sources.get(link.source_id) %}
           <div class="list-item list-item--stacked">
             <strong>{{ source.name if source else 'Historical source' }}</strong>
-            <div class="muted">{{ link.source_job_url }}</div>
-            {% if source and not source.is_active %}<div>{{ ui.badge('Inactive source', 'warning') }}</div>{% endif %}
+            {% if source and source.deleted_at %}{{ ui.badge('Deleted source', 'neutral') }}{% endif %}
+            <div class="muted">External job id: {{ link.external_job_id or '—' }} · Last seen {{ format_dt(link.last_seen_at) }}</div>
+            {% if link.source_job_url %}<a href="{{ link.source_job_url }}" target="_blank" rel="noreferrer">Open posting</a>{% endif %}
           </div>
         {% endfor %}
       </div>
     {% else %}
-      {{ ui.empty_state('No source links', 'This job does not have attached source provenance.') }}
+      {{ ui.empty_state('No source provenance records available', 'This job does not have attached source provenance.') }}
     {% endif %}
   </article>
   <article class="surface">

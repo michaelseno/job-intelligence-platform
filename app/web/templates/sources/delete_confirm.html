@@ -4,14 +4,14 @@
 {% block title %}Delete source · Sources{% endblock %}
 
 {% block content %}
-  {{ ui.page_header('Delete source', 'Review the impact before removing this source from active configuration.') }}
+  {{ ui.page_header('Delete source', 'Review cleanup impact before removing this source.') }}
 
   <section class="panel panel-narrow">
     <p>You are about to delete <strong>{{ source.name }}</strong>.</p>
 
     <div class="callout callout-danger">
-      <strong>Warning</strong>
-      <p>Deleting a source removes it from active configuration, hides it from default source lists and filters, and prevents future ingestion runs. Historical jobs and run records are preserved.</p>
+      <strong>This permanently removes most jobs from this source</strong>
+      <p>Deleting this source removes it from source management and future ingestion immediately. Jobs linked to this source will be cleaned up in the background. Only jobs that are both Matched and Active will be retained.</p>
     </div>
 
     <div class="import-summary-grid">
@@ -21,21 +21,20 @@
     </div>
 
     <div class="stack-list delete-impact-copy">
+      {% if impact_summary.has_linked_jobs %}
+        <p>{{ impact_summary.linked_job_count }} linked job(s) will be removed from Jobs, Dashboard, reminders, and digests immediately after deletion unless they are both Matched and Active. Physical cleanup finishes in the background.</p>
+        <p>Matched active jobs may remain visible if they match your filters. Their deleted source provenance is historical only and cannot be used for future ingestion.</p>
+      {% else %}
+        <p>No linked jobs found. No job cleanup is needed.</p>
+      {% endif %}
+
       {% if impact_summary.has_run_history %}
-        <p>This source has existing history that will remain visible in historical views.</p>
+        <p>Run records remain available for operational history, but this source will no longer be available in active source lists, filters, or run actions.</p>
       {% else %}
         <p>No run history found.</p>
       {% endif %}
 
-      {% if impact_summary.has_linked_jobs %}
-        <p>Jobs already linked to this source will keep their historical source reference.</p>
-      {% else %}
-        <p>No linked jobs found.</p>
-      {% endif %}
-
-      {% if impact_summary.tracked_job_count %}
-        <p>Tracked jobs linked to this source are preserved, but the source itself cannot be restored from this flow.</p>
-      {% endif %}
+      <p>Tracking status, reminders, manual keep, and digest inclusion do not preserve a job unless it is also Matched and Active.</p>
     </div>
 
     <form method="post" action="/sources/{{ source.id }}/delete" class="button-row button-row-wrap">

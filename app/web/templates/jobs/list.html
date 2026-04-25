@@ -76,7 +76,7 @@
               <tr class="{% if job.bucket == 'rejected' %}row-muted{% endif %}">
                 <td>
                   <a href="/jobs/{{ job.id }}"><strong>{{ job.title }}</strong></a>
-                  <div class="cell-subtitle">{{ job.company_name }} · {{ job.source_name }}</div>
+                  <div class="cell-subtitle">{{ job.company_name }} · {{ job.source_name }}{% if job.source_deleted %} <span class="badge badge-muted">Deleted source</span>{% endif %}</div>
                   {% if job.location_text %}<div class="cell-subtitle">{{ job.location_text }}</div>{% endif %}
                 </td>
                 <td>{{ ui.badge('bucket', job.bucket) }}</td>
@@ -104,7 +104,7 @@
           <div class="job-card__header">
             <div>
               <h2><a href="/jobs/{{ job.id }}">{{ job.title }}</a></h2>
-              <p class="muted">{{ job.company_name }} · {{ job.source_name }}</p>
+              <p class="muted">{{ job.company_name }} · {{ job.source_name }}{% if job.source_deleted %} <span class="badge badge-muted">Deleted source</span>{% endif %}</p>
             </div>
             <div class="badge-stack">{{ ui.badge('bucket', job.bucket) }} {{ ui.badge('tracking', job.tracking_status) }}</div>
           </div>
