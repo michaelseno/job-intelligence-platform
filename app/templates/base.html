@@ -9,8 +9,9 @@
     <script defer src="{{ url_for('static', path='js/app.js') }}"></script>
   </head>
   <body>
+    <a class="skip-link" href="#main-content">Skip to content</a>
     <div class="app-shell" data-page-key="{{ page_key|default('dashboard') }}">
-      <aside class="sidebar" data-sidebar>
+      <aside class="sidebar" id="app-sidebar" data-sidebar tabindex="-1" aria-label="Primary navigation">
         <div class="sidebar__brand">
           <div class="brand-mark">JI</div>
           <div>
@@ -20,7 +21,7 @@
         </div>
         <nav class="sidebar__nav" aria-label="Primary">
           {% for item in nav_items|default([]) %}
-            <a class="nav-link {% if item.key == page_key %}is-active{% endif %}" href="{{ item.href }}">
+            <a class="nav-link {% if item.key == page_key %}is-active{% endif %}" href="{{ item.href }}" aria-label="{{ item.label }}" title="{{ item.label }}">
               <span>{{ item.label }}</span>
             </a>
           {% endfor %}
@@ -35,17 +36,18 @@
           {% endif %}
         </div>
       </aside>
+      <button type="button" class="sidebar-backdrop" data-sidebar-backdrop aria-hidden="true" tabindex="-1"></button>
 
       <div class="app-shell__main">
         <header class="topbar">
-          <button type="button" class="topbar__menu" data-sidebar-toggle aria-label="Toggle navigation">☰</button>
+          <button type="button" class="topbar__menu" data-sidebar-toggle aria-label="Toggle navigation" aria-controls="app-sidebar" aria-expanded="false">☰</button>
           <div>
             <div class="eyebrow">Frontend revamp</div>
             <h1 class="topbar__title">{% block page_title %}Job Intelligence Platform{% endblock %}</h1>
           </div>
         </header>
 
-        <main class="page">
+        <main class="page" id="main-content" tabindex="-1">
           {% if message %}
             <section class="alert alert--{{ message_type|default('info') }}" role="status">
               <div class="alert__title">{{ message_type|default('Info')|title }}</div>
