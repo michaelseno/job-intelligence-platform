@@ -15,10 +15,9 @@
       <div class="field-group">
         <label for="bucket">Automated bucket</label>
         <select id="bucket" name="bucket">
-          <option value="">All buckets</option>
+          <option value="">All actionable</option>
           <option value="matched" {% if filters.bucket == 'matched' %}selected{% endif %}>Matched</option>
           <option value="review" {% if filters.bucket == 'review' %}selected{% endif %}>Review</option>
-          <option value="rejected" {% if filters.bucket == 'rejected' %}selected{% endif %}>Rejected</option>
         </select>
       </div>
       <div class="field-group">
@@ -57,7 +56,7 @@
 
   {% if jobs %}
     <section class="panel jobs-table-panel">
-      <p class="results-summary">{{ jobs|length }} job(s) found. Automated bucket, tracking status, and source health remain separate in this view.</p>
+      <p class="results-summary">{{ jobs|length }} actionable job(s) found. Automated bucket, tracking status, and source health remain separate in this view.</p>
       <div class="table-scroll">
         <table>
           <thead>
@@ -119,6 +118,6 @@
       {% endfor %}
     </section>
   {% else %}
-    {{ ui.empty_state('No jobs match the current view', 'Either ingestion has not produced jobs yet, or the current filters narrow the list to zero results.', '/sources', 'Open Sources') }}
+    {{ ui.empty_state('No actionable jobs found', 'Matched and review jobs that meet your filters will appear here. Rejected jobs are hidden from this main view.', '/sources', 'Open Sources') }}
   {% endif %}
 {% endblock %}

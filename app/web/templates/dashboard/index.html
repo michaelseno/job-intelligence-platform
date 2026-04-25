@@ -9,7 +9,6 @@
   <section class="stat-grid">
     {{ ui.stat_card('Matched', summary.matched, 'matched', '/jobs?bucket=matched') }}
     {{ ui.stat_card('Review', summary.review, 'review', '/jobs?bucket=review') }}
-    {{ ui.stat_card('Rejected', summary.rejected, 'rejected', '/jobs?bucket=rejected') }}
     {{ ui.stat_card('Saved needing action', summary.saved, 'default', '/tracking?tracking_status=saved') }}
     {{ ui.stat_card('Applied follow-up', summary.applied, 'default', '/tracking?tracking_status=applied') }}
   </section>
@@ -17,7 +16,7 @@
   {% if not sources %}
     {{ ui.empty_state('No sources configured yet', 'Add a Greenhouse or Lever source first, then run ingestion to populate the dashboard.', '/sources', 'Add Source') }}
   {% elif not has_jobs %}
-    {{ ui.empty_state('No jobs yet', 'Sources exist, but ingestion has not produced reviewable jobs yet. Run a source from the Sources page to continue.', '/sources', 'Open Sources') }}
+    {{ ui.empty_state('No actionable jobs yet', 'Matched and review jobs will appear here after ingestion. Rejected jobs are hidden from the dashboard queue.', '/sources', 'Open Sources') }}
   {% endif %}
 
   <div class="dashboard-grid">

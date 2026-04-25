@@ -21,8 +21,8 @@
     <input id="jobs-search" type="search" name="search" value="{{ filters.search }}" placeholder="Search title, company, or description">
     <label class="sr-only" for="jobs-bucket">Bucket</label>
     <select id="jobs-bucket" name="bucket">
-      <option value="">All buckets</option>
-      {% for value in ['matched', 'review', 'rejected'] %}
+      <option value="">All actionable</option>
+      {% for value in ['matched', 'review'] %}
         <option value="{{ value }}" {% if filters.bucket == value %}selected{% endif %}>{{ value|title }}</option>
       {% endfor %}
     </select>
@@ -51,6 +51,7 @@
   </form>
 
   {% if jobs %}
+    <p class="muted">{{ jobs|length }} actionable job(s) found.</p>
     <div class="table-wrap">
       <table>
         <thead>
@@ -84,7 +85,7 @@
       </table>
     </div>
   {% else %}
-    {{ ui.empty_state('No jobs found', 'Try broadening your filters or run an active source to bring in new postings.', '/sources', 'Manage sources') }}
+    {{ ui.empty_state('No actionable jobs found', 'Matched and review jobs that meet your filters will appear here. Rejected jobs are hidden from this main view.', '/sources', 'Manage sources') }}
   {% endif %}
 </section>
 {% endblock %}
