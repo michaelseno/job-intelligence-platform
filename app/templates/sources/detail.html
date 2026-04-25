@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}{{ source.name }} · Sources{% endblock %}
+{% block page_title %}Source detail{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <div class="eyebrow">Source detail</div>
+    <h2>{{ source.name }}</h2>
+    <p>{{ source.base_url }}{% if source.company_name %} · {{ source.company_name }}{% endif %}</p>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="/sources/{{ source.id }}/run?next=/sources/{{ source.id }}"><button class="btn btn--primary" type="submit">Run now</button></form>
+    <a class="btn btn--secondary" href="/sources/{{ source.id }}/edit">Edit source</a>
+    <a class="btn btn--ghost btn--danger" href="/sources/{{ source.id }}/delete">Delete source</a>
+  </div>
+</section>
+
+<section class="stats-grid">
+  <article class="stat-card"><span>Health</span><strong>{{ source.health_state|default('unknown')|title }}</strong></article>
+  <article class="stat-card"><span>Adapter</span><strong>{{ source.adapter_key or source.source_type }}</strong></article>
+  <article class="stat-card"><span>Last run</span><strong>{{ format_dt(source.last_run_at) if source.last_run_at else 'Never run' }}</strong></article>
+  <article class="stat-card"><span>Status</span><strong>{% if source.is_active %}Active{% else %}Inactive{% endif %}</strong></article>
+</section>
+
+<section class="content-grid content-grid--2">
+  <article class="surface">
+    <div class="section-heading"><h3>Configuration</h3></div>
+    <dl class="detail-list">
+      <div><dt>Source type</dt><dd>{{ source.source_type }}</dd></div>
+      <div><dt>Adapter key</dt><dd>{{ source.adapter_key or 'Not set' }}</dd></div>
+      <div><dt>External identifier</dt><dd>{{ source.external_identifier or 'Not set' }}</dd></div>
+      <div><dt>Notes</dt><dd>{{ source.notes or 'No notes added.' }}</dd></div>
+    </dl>
+  </article>
+  <article class="surface">
+    <div class="section-heading"><h3>Recent runs</h3></div>
+    {% if runs %}
+      <div class="stack-list">
+        {% for run in runs %}
+          <a class="list-item" href="/ops/runs/{{ run.id }}">
+            <div>
+              <strong>Run #{{ run.id }}</strong>
+              <div class="muted">{{ format_dt(run.started_at) }}</div>
+            </div>
+            {{ ui.badge(run.status|title, ui.tone_from_status(run.status)) }}
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ ui.empty_state('No run history yet', 'Run this source to populate operational history and health details.') }}
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

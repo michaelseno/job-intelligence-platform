@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Tracking · Job Intelligence{% endblock %}
+{% block page_title %}Tracking{% endblock %}
+{% block content %}
+<section class="page-header"><div><div class="eyebrow">Workflow</div><h2>Tracked jobs</h2><p>Keep saved, applied, and interview-stage work visible without changing current route behavior.</p></div></section>
+<section class="surface">
+  <form method="get" class="toolbar" data-clean-empty-query="true"><select name="tracking_status"><option value="">All statuses</option>{% for value in tracking_statuses %}<option value="{{ value }}" {% if filters.tracking_status == value %}selected{% endif %}>{{ value|replace('_', ' ')|title }}</option>{% endfor %}</select><input type="search" name="search" value="{{ filters.search }}" placeholder="Search tracked jobs"><button class="btn btn--primary" type="submit">Apply</button><a class="btn btn--ghost" href="/tracking">Reset</a></form>
+  {% if jobs %}
+    <div class="stack-list">{% for job in jobs %}<a class="list-item" href="/jobs/{{ job.id }}"><div><strong>{{ job.title }}</strong><div class="muted">{{ job.company_name }}</div></div>{{ ui.badge(job.tracking_status|replace('_', ' ')|title, ui.tone_from_status(job.tracking_status)) }}</a>{% endfor %}</div>
+  {% else %}
+    {{ ui.empty_state('No tracked jobs', 'Jobs moved into tracking will appear here.') }}
+  {% endif %}
+</section>
+{% endblock %}

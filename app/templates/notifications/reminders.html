@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Reminders · Job Intelligence{% endblock %}
+{% block page_title %}Reminders{% endblock %}
+{% block content %}
+<section class="page-header"><div><div class="eyebrow">Notifications</div><h2>Reminder queue</h2><p>Keep follow-up work readable with grouped reminders and direct job links.</p></div><div class="page-actions"><form method="post" action="/reminders/generate?next=/reminders"><button class="btn btn--primary" type="submit">Generate reminders</button></form></div></section>
+{% if grouped_reminders %}
+  <section class="surface"><div class="stack-list">{% for status, reminders in grouped_reminders.items() %}<div class="list-group"><h3>{{ status|title }}</h3><ul>{% for reminder in reminders %}<li class="reminder-row"><a href="/jobs/{{ reminder.job.id }}">{{ reminder.job.title }}</a><span class="muted">{{ reminder.job.company_name }}</span><form method="post" action="/reminders/{{ reminder.reminder.id }}/dismiss?next=/reminders"><button class="btn btn--ghost btn--sm" type="submit">Dismiss</button></form></li>{% endfor %}</ul></div>{% endfor %}</div></section>
+{% else %}
+  {{ ui.empty_state('No reminders pending', 'Reminders generated from tracked jobs will appear here when follow-up is due.') }}
+{% endif %}
+{% endblock %}

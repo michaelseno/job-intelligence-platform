@@ -1,0 +1,24 @@
+{% macro badge(label, tone='neutral') -%}
+<span class="badge badge--{{ tone }}">{{ label }}</span>
+{%- endmacro %}
+
+{% macro empty_state(title, body, cta_href=None, cta_label=None) -%}
+<section class="empty-state">
+  <div class="empty-state__icon">◎</div>
+  <h3>{{ title }}</h3>
+  <p>{{ body }}</p>
+  {% if cta_href and cta_label %}
+    <a href="{{ cta_href }}" class="btn btn--primary">{{ cta_label }}</a>
+  {% endif %}
+</section>
+{%- endmacro %}
+
+{% macro tone_from_status(value) -%}
+  {%- set normalized = (value or 'neutral')|lower -%}
+  {%- if normalized in ['healthy', 'success', 'matched'] -%}success
+  {%- elif normalized in ['warning', 'stale', 'review'] -%}warning
+  {%- elif normalized in ['failed', 'error', 'rejected', 'danger'] -%}danger
+  {%- elif normalized in ['running', 'pending', 'info', 'applied', 'interview'] -%}info
+  {%- else -%}neutral
+  {%- endif -%}
+{%- endmacro %}

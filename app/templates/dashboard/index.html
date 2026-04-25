@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Dashboard · Job Intelligence{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <div class="eyebrow">Overview</div>
+    <h2>Operational dashboard</h2>
+    <p>Track job pipeline health, source reliability, and recent review activity from one shared workspace.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--secondary" href="/jobs">Review jobs</a>
+    <a class="btn btn--primary" href="/sources">Manage sources</a>
+  </div>
+</section>
+
+<section class="stats-grid">
+  <article class="stat-card"><span>Matched jobs</span><strong>{{ summary.matched }}</strong></article>
+  <article class="stat-card"><span>Needs review</span><strong>{{ summary.review }}</strong></article>
+  <article class="stat-card"><span>Pending reminders</span><strong>{{ summary.pending_reminders }}</strong></article>
+  <article class="stat-card"><span>Active sources</span><strong>{{ summary.source_count }}</strong></article>
+</section>
+
+<section class="content-grid content-grid--2">
+  <article class="surface">
+    <div class="section-heading"><h3>Jobs needing attention</h3><a href="/jobs">View all</a></div>
+    {% if review_jobs %}
+      <div class="stack-list">
+        {% for job in review_jobs[:6] %}
+          <a class="list-item" href="/jobs/{{ job.id }}">
+            <div>
+              <strong>{{ job.title }}</strong>
+              <div class="muted">{{ job.company_name }} · {{ job.location_text or 'Location not specified' }}</div>
+            </div>
+            {{ ui.badge(job.bucket|title, ui.tone_from_status(job.bucket)) }}
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ ui.empty_state('No jobs need review', 'Matched and rejected jobs are up to date right now.') }}
+    {% endif %}
+  </article>
+
+  <article class="surface">
+    <div class="section-heading"><h3>Source health</h3><a href="/source-health">Open health view</a></div>
+    {% if source_warnings %}
+      <div class="stack-list">
+        {% for source in source_warnings[:6] %}
+          <div class="list-item">
+            <div>
+              <strong>{{ source.name }}</strong>
+              <div class="muted">{{ source.health_message or 'Health warning requires review.' }}</div>
+            </div>
+            {{ ui.badge(source.health_state|title, ui.tone_from_status(source.health_state)) }}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ ui.empty_state('All sources look healthy', 'Source health warnings and failures will appear here when attention is needed.') }}
+    {% endif %}
+  </article>
+</section>
+
+<section class="content-grid content-grid--2">
+  <article class="surface">
+    <div class="section-heading"><h3>Recent matched jobs</h3><a href="/jobs?bucket=matched">Matched queue</a></div>
+    {% if matched_jobs %}
+      <div class="stack-list">
+        {% for job in matched_jobs[:6] %}
+          <a class="list-item" href="/jobs/{{ job.id }}">
+            <div>
+              <strong>{{ job.title }}</strong>
+              <div class="muted">{{ job.company_name }}</div>
+            </div>
+            <span class="score-pill">{{ job.score or 0 }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ ui.empty_state('No matched jobs yet', 'Jobs that score well will appear here for quick daily review.') }}
+    {% endif %}
+  </article>
+
+  <article class="surface">
+    <div class="section-heading"><h3>Reminder queue</h3><a href="/reminders">Open reminders</a></div>
+    {% if reminder_jobs %}
+      <div class="stack-list">
+        {% for job in reminder_jobs[:6] %}
+          <a class="list-item" href="/jobs/{{ job.id }}">
+            <div>
+              <strong>{{ job.title }}</strong>
+              <div class="muted">{{ job.company_name }}</div>
+            </div>
+            {{ ui.badge(job.tracking_status|default('saved')|title, ui.tone_from_status(job.tracking_status)) }}
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ ui.empty_state('No pending reminders', 'Follow-up reminders generated from tracking activity will appear here.') }}
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

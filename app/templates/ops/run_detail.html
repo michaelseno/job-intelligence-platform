@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Run #{{ run.id }} · Runs{% endblock %}
+{% block page_title %}Run detail{% endblock %}
+{% block content %}
+<section class="page-header"><div><div class="eyebrow">Run detail</div><h2>Run #{{ run.id }}</h2><p>{{ source.name if source else 'Historical source' }} · {{ format_dt(run.started_at) }}</p></div><div class="page-actions"><a class="btn btn--secondary" href="/ops/runs">Back to runs</a>{% if source %}<a class="btn btn--primary" href="/sources/{{ source.id }}">Open source</a>{% endif %}</div></section>
+<section class="stats-grid"><article class="stat-card"><span>Status</span><strong>{{ run.status|title }}</strong></article><article class="stat-card"><span>Jobs fetched</span><strong>{{ run.jobs_fetched_count|default(0) }}</strong></article><article class="stat-card"><span>Created</span><strong>{{ run.jobs_created_count|default(0) }}</strong></article><article class="stat-card"><span>Warnings</span><strong>{{ run.warning_count|default(0) }}</strong></article></section>
+<section class="surface"><div class="section-heading"><h3>Run summary</h3></div><p>{{ run.log_summary or 'No log summary captured.' }}</p></section>
+{% endblock %}

@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}{{ job.title }} · Jobs{% endblock %}
+{% block page_title %}Job detail{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <div class="eyebrow">Job detail</div>
+    <h2>{{ job.title }}</h2>
+    <p>{{ job.company_name }} · {{ job.location_text or 'Location not specified' }}</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn--secondary" href="{{ job.job_url }}" target="_blank" rel="noreferrer">Open listing</a>
+    <form method="post" action="/jobs/{{ job.id }}/keep?next=/jobs/{{ job.id }}">
+      <button class="btn btn--primary" type="submit">Keep job</button>
+    </form>
+  </div>
+</section>
+
+<section class="stats-grid">
+  <article class="stat-card"><span>Decision bucket</span><strong>{{ decision.bucket|default(job.latest_bucket)|title }}</strong></article>
+  <article class="stat-card"><span>Score</span><strong>{{ decision.final_score|default(job.latest_score)|default(0) }}</strong></article>
+  <article class="stat-card"><span>Tracking</span><strong>{{ job.tracking_status|default('untracked')|replace('_', ' ')|title }}</strong></article>
+  <article class="stat-card"><span>Current state</span><strong>{{ job.current_state|title }}</strong></article>
+</section>
+
+<section class="content-grid content-grid--detail">
+  <article class="surface">
+    <div class="section-heading"><h3>Summary</h3></div>
+    <p class="lead">{{ decision.decision_reason_summary if decision else 'Decisioning details will appear after ingestion classification runs.' }}</p>
+    {% if description_text or job.description_text %}
+      <div class="rich-copy">{{ description_text or job.description_text }}</div>
+    {% else %}
+      <p class="muted">No description text captured for this posting.</p>
+    {% endif %}
+  </article>
+
+  <aside class="surface side-panel">
+    <div class="section-heading"><h3>Update tracking</h3></div>
+    <form method="post" action="/jobs/{{ job.id }}/tracking-status?next=/jobs/{{ job.id }}" class="stack-form">
+      <label for="tracking_status">Tracking status</label>
+      <select id="tracking_status" name="tracking_status">
+        {% for value in tracking_statuses|default([]) %}
+          <option value="{{ value }}" {% if job.tracking_status == value %}selected{% endif %}>{{ value|replace('_', ' ')|title }}</option>
+        {% endfor %}
+      </select>
+      <label for="note_text">Notes</label>
+      <textarea id="note_text" name="note_text" rows="4" placeholder="Add context for the latest tracking update"></textarea>
+      <button class="btn btn--primary" type="submit">Save tracking status</button>
+    </form>
+  </aside>
+</section>
+
+<section class="content-grid content-grid--2">
+  <article class="surface">
+    <div class="section-heading"><h3>Positive rules</h3></div>
+    {% if matched_rules %}
+      <div class="stack-list">{% for rule in matched_rules %}<div class="rule-card"><strong>{{ rule.rule_key }}</strong><p>{{ rule.explanation_text }}</p></div>{% endfor %}</div>
+    {% else %}
+      {{ ui.empty_state('No positive rules', 'No positive rule matches were recorded for this job.') }}
+    {% endif %}
+  </article>
+  <article class="surface">
+    <div class="section-heading"><h3>Negative and informational rules</h3></div>
+    {% if negative_rules %}
+      <div class="stack-list">{% for rule in negative_rules %}<div class="rule-card"><strong>{{ rule.rule_key }}</strong><p>{{ rule.explanation_text }}</p></div>{% endfor %}</div>
+    {% else %}
+      {{ ui.empty_state('No negative rules', 'Negative evidence will appear here when classification records it.') }}
+    {% endif %}
+  </article>
+</section>
+
+<section class="content-grid content-grid--2">
+  <article class="surface">
+    <div class="section-heading"><h3>Source links</h3></div>
+    {% if source_links %}
+      <div class="stack-list">
+        {% for link in source_links %}
+          {% set source = sources.get(link.source_id|string) or sources.get(link.source_id) %}
+          <div class="list-item list-item--stacked">
+            <strong>{{ source.name if source else 'Historical source' }}</strong>
+            <div class="muted">{{ link.source_job_url }}</div>
+            {% if source and not source.is_active %}<div>{{ ui.badge('Inactive source', 'warning') }}</div>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      {{ ui.empty_state('No source links', 'This job does not have attached source provenance.') }}
+    {% endif %}
+  </article>
+  <article class="surface">
+    <div class="section-heading"><h3>Tracking timeline</h3></div>
+    {% if tracking_events %}
+      <div class="stack-list">{% for event in tracking_events %}<div class="list-item list-item--stacked"><strong>{{ event.event_type|replace('_', ' ')|title }}</strong><div class="muted">{{ event.note_text or 'No note provided.' }}</div></div>{% endfor %}</div>
+    {% else %}
+      {{ ui.empty_state('No tracking events yet', 'Tracking updates will appear here after the first status change.') }}
+    {% endif %}
+  </article>
+</section>
+{% endblock %}

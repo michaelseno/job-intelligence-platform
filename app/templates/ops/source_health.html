@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Source Health · Job Intelligence{% endblock %}
+{% block page_title %}Source health{% endblock %}
+{% block content %}
+<section class="page-header"><div><div class="eyebrow">Operations</div><h2>Source health</h2><p>Review source readiness, latest outcomes, and warnings using the same shared shell as core pages.</p></div><div class="page-actions"><a class="btn btn--secondary" href="/ops/runs">Run history</a><a class="btn btn--primary" href="/sources">Manage sources</a></div></section>
+<section class="surface">
+  {% if sources %}
+    <div class="table-wrap"><table><thead><tr><th>Source</th><th>Health</th><th>Last run</th><th>Message</th></tr></thead><tbody>{% for source in sources %}<tr><td><a class="table-link" href="/sources/{{ source.id }}">{{ source.name }}</a></td><td>{{ ui.badge((source.health_state or 'unknown')|title, ui.tone_from_status(source.health_state)) }}</td><td>{{ format_dt(source.last_run_at) if source.last_run_at else 'Never run' }}</td><td>{{ source.health_message or 'No issues reported.' }}</td></tr>{% endfor %}</tbody></table></div>
+  {% else %}
+    {{ ui.empty_state('No source health data', 'Create or run a source to populate operational health status.', '/sources', 'Manage sources') }}
+  {% endif %}
+</section>
+{% endblock %}

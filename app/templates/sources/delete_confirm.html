@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% import 'macros/ui.html' as ui %}
+{% block title %}Delete {{ source.name }} · Sources{% endblock %}
+{% block page_title %}Delete source{% endblock %}
+{% block content %}
+<section class="page-header">
+  <div>
+    <div class="eyebrow">Confirmation</div>
+    <h2>Delete source</h2>
+    <p>Review the historical impact before deleting <strong>{{ source.name }}</strong>.</p>
+  </div>
+</section>
+<section class="content-grid content-grid--2">
+  <article class="surface">
+    <div class="section-heading"><h3>Impact summary</h3></div>
+    <dl class="detail-list">
+      <div><dt>Run history</dt><dd>{{ impact_summary.run_count }}</dd></div>
+      <div><dt>Linked jobs</dt><dd>{{ impact_summary.linked_job_count }}</dd></div>
+      <div><dt>Tracked jobs</dt><dd>{{ impact_summary.tracked_job_count }}</dd></div>
+    </dl>
+    {% if impact_summary.has_linked_jobs or impact_summary.has_run_history %}
+      <div class="alert alert--warning">Historical jobs and run references remain important context for downstream review.</div>
+    {% endif %}
+  </article>
+  <article class="surface">
+    <div class="section-heading"><h3>Confirm deletion</h3></div>
+    <form method="post" action="/sources/{{ source.id }}/delete" class="stack-form">
+      <p class="muted">This destructive action requires confirmation and names the affected source explicitly.</p>
+      <div class="form-footer form-footer--split">
+        <a class="btn btn--ghost" href="/sources/{{ source.id }}">Cancel</a>
+        <button class="btn btn--danger" type="submit">Delete source</button>
+      </div>
+    </form>
+  </article>
+</section>
+{% endblock %}

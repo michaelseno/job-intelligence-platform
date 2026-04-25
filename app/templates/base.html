@@ -1,0 +1,63 @@
+{% import 'macros/ui.html' as ui %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Job Intelligence Platform{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='css/app.css') }}">
+    <script defer src="{{ url_for('static', path='js/app.js') }}"></script>
+  </head>
+  <body>
+    <div class="app-shell" data-page-key="{{ page_key|default('dashboard') }}">
+      <aside class="sidebar" data-sidebar>
+        <div class="sidebar__brand">
+          <div class="brand-mark">JI</div>
+          <div>
+            <div class="brand-title">Job Intelligence</div>
+            <div class="brand-subtitle">Operations workspace</div>
+          </div>
+        </div>
+        <nav class="sidebar__nav" aria-label="Primary">
+          {% for item in nav_items|default([]) %}
+            <a class="nav-link {% if item.key == page_key %}is-active{% endif %}" href="{{ item.href }}">
+              <span>{{ item.label }}</span>
+            </a>
+          {% endfor %}
+        </nav>
+        <div class="sidebar__footer">
+          {% if latest_run_summary %}
+            <div class="sidebar-summary">
+              <div class="eyebrow">Latest run</div>
+              <strong>#{{ latest_run_summary.id }}</strong>
+              <div>{{ latest_run_summary.status|replace('_', ' ')|title }}</div>
+            </div>
+          {% endif %}
+        </div>
+      </aside>
+
+      <div class="app-shell__main">
+        <header class="topbar">
+          <button type="button" class="topbar__menu" data-sidebar-toggle aria-label="Toggle navigation">☰</button>
+          <div>
+            <div class="eyebrow">Frontend revamp</div>
+            <h1 class="topbar__title">{% block page_title %}Job Intelligence Platform{% endblock %}</h1>
+          </div>
+        </header>
+
+        <main class="page">
+          {% if message %}
+            <section class="alert alert--{{ message_type|default('info') }}" role="status">
+              <div class="alert__title">{{ message_type|default('Info')|title }}</div>
+              <div>{{ message }}</div>
+            </section>
+          {% endif %}
+          {% for flash in flashes|default([]) %}
+            <section class="alert alert--info" role="status">{{ flash }}</section>
+          {% endfor %}
+          {% block content %}{% endblock %}
+        </main>
+      </div>
+    </div>
+  </body>
+</html>
