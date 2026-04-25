@@ -1,3 +1,10 @@
-from .._pyc_loader import export_compiled
+from __future__ import annotations
 
-globals().update(export_compiled(__name__, "config/__pycache__/logging.cpython-313.orig.pyc"))
+import logging
+
+
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )

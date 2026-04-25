@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Run {{ run.id }} · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Run #' ~ run.id, 'Detailed ingestion run metrics and latest outcome for operational review.') }}
+  <section class="panel detail-grid-two">
+    <div>
+      <h2>Run summary</h2>
+      <ul class="meta-list">
+        <li><strong>Source:</strong> {{ source.name if source else 'Source #' ~ run.source_id }}</li>
+        <li><strong>Status:</strong> {{ run.status|replace('_', ' ')|title }}</li>
+        <li><strong>Trigger:</strong> {{ run.trigger_type|replace('_', ' ')|title }}</li>
+        <li><strong>Started:</strong> {{ format_dt(run.started_at) }}</li>
+        <li><strong>Finished:</strong> {{ format_dt(run.finished_at) }}</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Metrics</h2>
+      <ul class="meta-list">
+        <li><strong>Jobs fetched:</strong> {{ run.jobs_fetched_count }}</li>
+        <li><strong>Created:</strong> {{ run.jobs_created_count }}</li>
+        <li><strong>Updated:</strong> {{ run.jobs_updated_count }}</li>
+        <li><strong>Unchanged:</strong> {{ run.jobs_unchanged_count }}</li>
+        <li><strong>Errors:</strong> {{ run.error_count }}</li>
+        <li><strong>Warnings:</strong> {{ run.warning_count }}</li>
+        <li><strong>Empty result:</strong> {{ 'Yes' if run.empty_result_flag else 'No' }}</li>
+      </ul>
+    </div>
+  </section>
+  <section class="panel">
+    <h2>Log summary</h2>
+    <p>{{ run.log_summary or 'No log summary recorded.' }}</p>
+  </section>
+{% endblock %}

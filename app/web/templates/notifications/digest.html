@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Digest · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Daily Digest', 'In-app digest of newly eligible matched and review jobs.') }}
+  <section class="panel">
+    <form method="post" action="/digest/generate" class="inline-form">
+      <button class="button button-primary" type="submit">Generate digest</button>
+    </form>
+  </section>
+
+  {% if digest %}
+    <section class="panel">
+      <p><strong>Digest date:</strong> {{ format_date(digest.digest_date) }}</p>
+      <p><strong>Generated:</strong> {{ format_dt(digest.generated_at) }}</p>
+      <p><strong>Summary:</strong> {{ digest.content_summary }}</p>
+    </section>
+
+    <section class="panel">
+      <h2>New matched jobs</h2>
+      {% if grouped_items.matched %}
+        <ul class="stack-list">
+          {% for entry in grouped_items.matched %}
+            <li class="stack-item"><div><strong>{{ entry.job.title }}</strong><p class="muted">{{ entry.job.company_name }} · {{ entry.item.reason|replace('_', ' ')|title }}</p></div><a href="/jobs/{{ entry.job.id }}">Open</a></li>
+          {% endfor %}
+        </ul>
+      {% else %}<p class="muted">No newly matched jobs in this digest.</p>{% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>New review jobs</h2>
+      {% if grouped_items.review %}
+        <ul class="stack-list">
+          {% for entry in grouped_items.review %}
+            <li class="stack-item"><div><strong>{{ entry.job.title }}</strong><p class="muted">{{ entry.job.company_name }} · {{ entry.item.reason|replace('_', ' ')|title }}</p></div><a href="/jobs/{{ entry.job.id }}">Open</a></li>
+          {% endfor %}
+        </ul>
+      {% else %}<p class="muted">No newly review-worthy jobs in this digest.</p>{% endif %}
+    </section>
+  {% else %}
+    {{ ui.empty_state('No digest available yet', 'Generate a digest after ingestion and classification to populate this page.') }}
+  {% endif %}
+{% endblock %}

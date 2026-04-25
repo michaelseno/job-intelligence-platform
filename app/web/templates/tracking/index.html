@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Tracking · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Tracking', 'User-managed workflow state across saved, applied, interview, rejected, and offer jobs.') }}
+
+  <section class="panel">
+    <form method="get" class="filters-form">
+      <div class="field-group">
+        <label for="tracking_status">Status</label>
+        <select id="tracking_status" name="tracking_status">
+          <option value="all" {% if filters.tracking_status == 'all' %}selected{% endif %}>All tracked jobs</option>
+          {% for status in tracking_statuses %}
+            <option value="{{ status }}" {% if filters.tracking_status == status %}selected{% endif %}>{{ status|title }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field-group field-group-wide">
+        <label for="search">Search tracked jobs</label>
+        <input id="search" name="search" type="search" value="{{ filters.search }}">
+      </div>
+      <div class="field-group">
+        <label for="sort">Sort</label>
+        <select id="sort" name="sort">
+          <option value="last_updated" {% if filters.sort == 'last_updated' %}selected{% endif %}>Last updated</option>
+          <option value="urgency" {% if filters.sort == 'urgency' %}selected{% endif %}>Reminder urgency</option>
+        </select>
+      </div>
+      <div class="button-row button-row-wrap">
+        <button class="button button-primary" type="submit">Apply</button>
+        <a class="button button-secondary" href="/tracking">Reset</a>
+      </div>
+    </form>
+  </section>
+
+  {% if jobs %}
+    <section class="panel">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Role</th><th>Automated bucket</th><th>Tracking</th><th>Reminder</th><th>Updated</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for job in jobs %}
+              <tr>
+                <td><a href="/jobs/{{ job.id }}"><strong>{{ job.title }}</strong></a><div class="cell-subtitle">{{ job.company_name }}</div></td>
+                <td>{{ ui.badge('bucket', job.bucket) }}</td>
+                <td>{{ ui.badge('tracking', job.tracking_status) }}</td>
+                <td>{% if job.reminder %}{{ job.reminder.reminder_type|replace('_', ' ')|title }}{% else %}—{% endif %}</td>
+                <td>{{ format_dt(job.last_seen_at) }}</td>
+                <td>{{ ui.tracking_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else ''), tracking_statuses, True) }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% else %}
+    {{ ui.empty_state('No tracked jobs in this view', 'Saved and applied work stays separate from automated buckets. Adjust filters or save a job from the jobs list.', '/jobs', 'Open Jobs') }}
+  {% endif %}
+{% endblock %}

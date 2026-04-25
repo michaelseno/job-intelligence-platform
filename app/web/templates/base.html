@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Job Intelligence Platform{% endblock %}</title>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='styles.css') }}">
+  <script defer src="{{ request.url_for('static', path='app.js') }}"></script>
+</head>
+<body>
+  {% import 'includes/macros.html' as ui %}
+  <header class="site-header">
+    <div class="container site-header__inner">
+      <div>
+        <a href="/dashboard" class="site-title">Job Intelligence Platform</a>
+        <p class="site-subtitle">Server-rendered MVP workflow for discovery, review, and tracking.</p>
+      </div>
+      <nav aria-label="Primary" class="primary-nav">
+        {% for item in nav_items %}
+          <a href="{{ item.href }}" class="nav-link{% if page_key == item.key %} is-active{% endif %}">{{ item.label }}</a>
+        {% endfor %}
+      </nav>
+    </div>
+    {% if latest_run_summary %}
+      <div class="container site-meta">Latest ingestion: {{ latest_run_summary.status|replace('_', ' ')|title }} · {{ format_dt(latest_run_summary.started_at) }}</div>
+    {% endif %}
+  </header>
+
+  <main class="container page-shell">
+    {% if message %}
+      {{ ui.alert(message_type, message) }}
+    {% endif %}
+    {% for flash in flashes %}
+      {{ ui.alert(flash.level, flash.message) }}
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">Local MVP mode · Lightweight Jinja UI</div>
+  </footer>
+</body>
+</html>

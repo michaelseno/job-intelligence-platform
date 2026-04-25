@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Reminders · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Reminders', 'Saved-job and applied follow-up reminders driven by tracking timestamps.') }}
+  <section class="panel">
+    <form method="post" action="/reminders/generate" class="inline-form">
+      <button class="button button-primary" type="submit">Generate reminders</button>
+    </form>
+  </section>
+
+  {% if grouped_reminders %}
+    {% for status, reminders in grouped_reminders.items() %}
+      <section class="panel">
+        <h2>{{ status|title }} reminders</h2>
+        <ul class="stack-list">
+          {% for entry in reminders %}
+            <li class="stack-item stack-item-start">
+              <div>
+                <strong>{{ entry.job.title }}</strong>
+                <p class="muted">{{ entry.job.company_name }} · {{ entry.reminder.reminder_type|replace('_', ' ')|title }} · due {{ format_dt(entry.reminder.due_at) }}</p>
+                <div class="badge-stack">{{ ui.badge('bucket', entry.job.bucket) }} {{ ui.badge('tracking', entry.job.tracking_status) }}</div>
+              </div>
+              <div class="button-column">
+                <a class="button button-secondary" href="/jobs/{{ entry.job.id }}">Open job</a>
+                {% if entry.reminder.status == 'pending' %}
+                  <form method="post" action="/reminders/{{ entry.reminder.id }}/dismiss" class="inline-form">
+                    <input type="hidden" name="next" value="/reminders">
+                    <button class="button button-secondary" type="submit">Dismiss</button>
+                  </form>
+                {% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ul>
+      </section>
+    {% endfor %}
+  {% else %}
+    {{ ui.empty_state('No reminders yet', 'Generate reminders after jobs have been saved or applied long enough to require follow-up.') }}
+  {% endif %}
+{% endblock %}

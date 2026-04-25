@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Dashboard · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Dashboard', 'Daily command center for matched jobs, review candidates, reminders, and source issues.', '<a class="button button-primary" href="/sources">Add Source</a><a class="button button-secondary" href="/jobs">View Jobs</a>') }}
+
+  <section class="stat-grid">
+    {{ ui.stat_card('Matched', summary.matched, 'matched', '/jobs?bucket=matched') }}
+    {{ ui.stat_card('Review', summary.review, 'review', '/jobs?bucket=review') }}
+    {{ ui.stat_card('Rejected', summary.rejected, 'rejected', '/jobs?bucket=rejected') }}
+    {{ ui.stat_card('Saved needing action', summary.saved, 'default', '/tracking?tracking_status=saved') }}
+    {{ ui.stat_card('Applied follow-up', summary.applied, 'default', '/tracking?tracking_status=applied') }}
+  </section>
+
+  {% if not sources %}
+    {{ ui.empty_state('No sources configured yet', 'Add a Greenhouse or Lever source first, then run ingestion to populate the dashboard.', '/sources', 'Add Source') }}
+  {% elif not has_jobs %}
+    {{ ui.empty_state('No jobs yet', 'Sources exist, but ingestion has not produced reviewable jobs yet. Run a source from the Sources page to continue.', '/sources', 'Open Sources') }}
+  {% endif %}
+
+  <div class="dashboard-grid">
+    <section class="panel">
+      <div class="panel__header">
+        <h2>Recent matched jobs</h2>
+        <a href="/jobs?bucket=matched">See all</a>
+      </div>
+      {% if matched_jobs %}
+        <ul class="job-preview-list">
+          {% for job in matched_jobs %}
+            <li>
+              <a class="job-preview" href="/jobs/{{ job.id }}">
+                <strong>{{ job.title }}</strong>
+                <span>{{ job.company_name }}</span>
+                <span class="job-preview__meta">{{ ui.badge('bucket', job.bucket) }} {{ ui.badge('tracking', job.tracking_status) }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No matched jobs yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel__header">
+        <h2>Recent review jobs</h2>
+        <a href="/jobs?bucket=review">See all</a>
+      </div>
+      {% if review_jobs %}
+        <ul class="job-preview-list">
+          {% for job in review_jobs %}
+            <li>
+              <a class="job-preview" href="/jobs/{{ job.id }}">
+                <strong>{{ job.title }}</strong>
+                <span>{{ job.company_name }}</span>
+                <span class="job-preview__meta">{{ ui.badge('bucket', job.bucket) }} {{ ui.badge('tracking', job.tracking_status) }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No review jobs yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel__header">
+        <h2>Reminder queue</h2>
+        <div class="button-row">
+          <form method="post" action="/reminders/generate"><button class="button button-secondary" type="submit">Generate reminders</button></form>
+          <a href="/reminders">Open reminders</a>
+        </div>
+      </div>
+      {% if reminders %}
+        <ul class="stack-list">
+          {% for reminder in reminders %}
+            {% set job = reminder_jobs.get(reminder.job_posting_id) %}
+            <li class="stack-item">
+              <div>
+                <strong>{{ job.title if job else 'Tracked job' }}</strong>
+                <p class="muted">{{ reminder.reminder_type|replace('_', ' ')|title }} · due {{ format_dt(reminder.due_at) }}</p>
+              </div>
+              <a href="/jobs/{{ reminder.job_posting_id }}">Open</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">No pending reminders.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <div class="panel__header">
+        <h2>Source health warnings</h2>
+        <a href="/source-health">Open source health</a>
+      </div>
+      {% if source_warnings %}
+        <ul class="stack-list">
+          {% for source in source_warnings %}
+            <li class="stack-item">
+              <div>
+                <strong>{{ source.name }}</strong>
+                <p class="muted">{{ ui.badge('health', source.health_state) }} {{ source.health_message or 'Needs review.' }}</p>
+              </div>
+              <a href="/sources/{{ source.id }}">Details</a>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted">All configured sources look healthy.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="panel__header">
+      <h2>Daily digest</h2>
+      <div class="button-row">
+        <form method="post" action="/digest/generate"><button class="button button-secondary" type="submit">Generate digest</button></form>
+        <a href="/digest/latest">Open digest</a>
+      </div>
+    </div>
+    {% if latest_digest %}
+      <p>Latest digest generated {{ format_dt(latest_digest.generated_at) }} with summary: {{ latest_digest.content_summary }}.</p>
+    {% else %}
+      <p class="muted">No digest generated yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

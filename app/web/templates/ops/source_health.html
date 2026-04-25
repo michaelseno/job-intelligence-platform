@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}Source Health · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header('Source Health', 'Operational view of ingestion reliability, empty-result warnings, and recent source state.') }}
+
+  {% if sources %}
+    <section class="stat-grid">
+      {{ ui.stat_card('Healthy', sources|selectattr('health_state', 'equalto', 'healthy')|list|length, 'matched') }}
+      {{ ui.stat_card('Warnings', sources|selectattr('health_state', 'equalto', 'warning')|list|length, 'review') }}
+      {{ ui.stat_card('Errors', sources|selectattr('health_state', 'equalto', 'error')|list|length, 'rejected') }}
+      {{ ui.stat_card('Sources', sources|length, 'default') }}
+    </section>
+
+    <section class="panel">
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Source</th><th>Health</th><th>Latest run</th><th>Jobs fetched</th><th>Warning / next action</th><th>Actions</th></tr></thead>
+          <tbody>
+            {% for source in sources %}
+              <tr>
+                <td><a href="/sources/{{ source.id }}"><strong>{{ source.name }}</strong></a><div class="cell-subtitle">{{ source.source_type|replace('_', ' ')|title }}</div></td>
+                <td>{{ ui.badge('health', source.health_state) }}</td>
+                <td>{{ source.last_run_status or '—' }} · {{ format_dt(source.last_run_at) }}</td>
+                <td>{{ source.last_jobs_fetched_count }}</td>
+                <td>{{ source.health_message or 'No active warning.' }}</td>
+                <td><a href="/sources/{{ source.id }}">Source detail</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  {% else %}
+    {{ ui.empty_state('No sources yet', 'Add at least one source to begin collecting health data.', '/sources', 'Add Source') }}
+  {% endif %}
+{% endblock %}

@@ -1,3 +1,20 @@
-from .._pyc_loader import export_compiled
+from __future__ import annotations
 
-globals().update(export_compiled(__name__, "domain/__pycache__/operations.cpython-313.orig.pyc"))
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.persistence.models import Source, SourceRun
+
+
+class OperationsService:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def list_source_health(self) -> list[Source]:
+        return list(self.session.scalars(select(Source).where(Source.deleted_at.is_(None)).order_by(Source.name.asc())))
+
+    def list_runs(self) -> list[SourceRun]:
+        return list(self.session.scalars(select(SourceRun).order_by(SourceRun.started_at.desc())))
+
+    def get_run(self, run_id: int) -> SourceRun | None:
+        return self.session.get(SourceRun, run_id)

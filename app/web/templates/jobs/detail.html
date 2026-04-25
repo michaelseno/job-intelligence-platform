@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}{{ job.title }} · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {{ ui.page_header(job.title, (job.company_name or 'Unknown company') ~ ' · Review automated decision transparency, source evidence, and tracking actions.') }}
+
+  <div class="detail-layout">
+    <div class="detail-main">
+      <section class="panel">
+        <div class="job-summary-grid">
+          <div>
+            <p class="eyebrow">Automated classification</p>
+            <div class="badge-stack">{{ ui.badge('bucket', job.latest_bucket) }} {{ ui.badge('tracking', job.tracking_status) }}</div>
+          </div>
+          <div>
+            <p class="eyebrow">Score</p>
+            <p class="score-display">{{ job.latest_score if job.latest_score is not none else '—' }}</p>
+          </div>
+          <div>
+            <p class="eyebrow">Location</p>
+            <p>{{ job.location_text or 'Not provided' }}</p>
+          </div>
+          <div>
+            <p class="eyebrow">Posting state</p>
+            <p>{{ job.current_state|title }}</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Decision summary</h2>
+        {% if decision %}
+          <p>{{ decision.decision_reason_summary }}</p>
+          <ul class="meta-list">
+            <li><strong>Bucket:</strong> {{ decision.bucket|title }}</li>
+            <li><strong>Final score:</strong> {{ decision.final_score }}</li>
+            <li><strong>Sponsorship state:</strong> {{ decision.sponsorship_state|replace('_', ' ')|title }}</li>
+            <li><strong>Decision updated:</strong> {{ format_dt(decision.created_at) }}</li>
+          </ul>
+          {% if decision.sponsorship_state in ['ambiguous', 'missing'] %}
+            <div class="callout callout-warning">Sponsorship was unclear, so this job was kept out of auto-reject and surfaced for review.</div>
+          {% endif %}
+        {% else %}
+          <p class="muted">Classification details are not available yet.</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <h2>Matched rules</h2>
+        {% if matched_rules %}
+          <ul class="rule-list">
+            {% for rule in matched_rules %}
+              <li class="rule-item">
+                <div class="rule-item__header"><strong>{{ rule.rule_key|replace('_', ' ')|title }}</strong><span class="rule-score">+{{ rule.score_delta }}</span></div>
+                <p>{{ rule.explanation_text }}</p>
+                {% if rule.evidence_snippet %}<blockquote>{{ rule.evidence_snippet }}</blockquote>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No positive rule evidence stored.</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <h2>Rejected rules / negative signals</h2>
+        {% if negative_rules %}
+          <ul class="rule-list">
+            {% for rule in negative_rules %}
+              <li class="rule-item rule-item-negative">
+                <div class="rule-item__header"><strong>{{ rule.rule_key|replace('_', ' ')|title }}</strong><span class="rule-score">{{ rule.score_delta }}</span></div>
+                <p>{{ rule.explanation_text }}</p>
+                {% if rule.evidence_snippet %}<blockquote>{{ rule.evidence_snippet }}</blockquote>{% endif %}
+              {% if rule.evidence_snippet is none %}<p class="muted">Limited source text available for direct evidence.</p>{% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No negative rules stored for this decision.</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <h2>Source evidence</h2>
+        {% if source_links %}
+          <ul class="stack-list">
+            {% for link in source_links %}
+              {% set source = sources.get(link.source_id) %}
+              <li class="stack-item stack-item-start">
+                <div>
+                  <strong>{{ source.name if source else 'Source #' ~ link.source_id }}</strong>
+                  <p class="muted">External job id: {{ link.external_job_id or '—' }} · Last seen {{ format_dt(link.last_seen_at) }}</p>
+                </div>
+                <a href="{{ link.source_job_url }}" target="_blank" rel="noreferrer">Open posting</a>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No source provenance records available.</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <h2>Description excerpt</h2>
+        <div class="prose-block">{{ job.description_text or 'No description text captured yet.' }}</div>
+      </section>
+    </div>
+
+    <aside class="detail-sidebar">
+      <section class="panel">
+        <h2>Actions</h2>
+        <div class="button-column">
+          {{ ui.keep_form(job, '/jobs/' ~ job.id) }}
+          {{ ui.tracking_form(job, '/jobs/' ~ job.id, tracking_statuses) }}
+          <a class="button button-secondary" href="{{ job.job_url }}" target="_blank" rel="noreferrer">Open source posting</a>
+        </div>
+        <p class="muted">Save / Keep preserves the automated decision and initializes tracking only when no status exists yet.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Tracking timeline</h2>
+        {% if tracking_events %}
+          <ul class="stack-list">
+            {% for event in tracking_events %}
+              <li class="stack-item stack-item-start">
+                <div>
+                  <strong>{{ event.event_type|replace('_', ' ')|title }}</strong>
+                  <p class="muted">{{ event.tracking_status or 'No tracking status' }} · {{ format_dt(event.created_at) }}</p>
+                  {% if event.note_text %}<p>{{ event.note_text }}</p>{% endif %}
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="muted">No tracking actions yet.</p>
+        {% endif %}
+      </section>
+
+      <section class="panel">
+        <h2>Reminder context</h2>
+        {% if reminder %}
+          <p>{{ reminder.reminder_type|replace('_', ' ')|title }} due {{ format_dt(reminder.due_at) }}.</p>
+        {% else %}
+          <p class="muted">No pending reminder for this job.</p>
+        {% endif %}
+      </section>
+    </aside>
+  </div>
+{% endblock %}

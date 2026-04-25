@@ -11,26 +11,27 @@ from app.config.logging import configure_logging
 from app.config.settings import get_settings
 from app.web.routes import router
 
+
 settings = get_settings()
-scheduler = BackgroundScheduler()
+scheduler = BackgroundScheduler(timezone="UTC")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
-    if getattr(settings, "scheduler_enabled", False) and not scheduler.running:
+    if settings.scheduler_enabled and not scheduler.running:
         scheduler.start()
     try:
         yield
     finally:
         if scheduler.running:
-            scheduler.shutdown()
+            scheduler.shutdown(wait=False)
 
 
-app = FastAPI(lifespan=lifespan)
-
-static_dir = Path(__file__).resolve().parent / "static"
-if static_dir.exists():
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
+app = FastAPI(title="Job Intelligence Platform MVP", lifespan=lifespan)
+app_dir = Path(__file__).resolve().parent
+static_dir = app_dir / "static"
+if not static_dir.exists():
+    static_dir = app_dir / "web" / "static"
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 app.include_router(router)
