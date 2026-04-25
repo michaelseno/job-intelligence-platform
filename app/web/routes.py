@@ -119,6 +119,12 @@ def parse_optional_source_id(source_id: str | None = Query(default=None)) -> int
     return parse_optional_int_query("source_id", source_id)
 
 
+def parse_form_checkbox(value: Any) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().lower() in {"on", "true", "1", "yes"}
+
+
 def redirect(url: str, status_code: int = status.HTTP_303_SEE_OTHER) -> RedirectResponse:
     return RedirectResponse(url=url, status_code=status_code)
 
@@ -340,7 +346,7 @@ async def parse_source_form(request: Request) -> tuple[dict[str, Any], SourceCre
         "external_identifier": str(form.get("external_identifier", "")),
         "adapter_key": str(form.get("adapter_key", "")),
         "notes": str(form.get("notes", "")),
-        "is_active": form.get("is_active") == "on",
+        "is_active": parse_form_checkbox(form.get("is_active")),
     }
     payload = SourceCreateRequest(
         name=form_data["name"],
