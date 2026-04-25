@@ -49,10 +49,10 @@ def test_source_delete_confirmation_explains_async_cleanup_and_retention(client,
         "jobs": [
             {
                 "id": 501,
-                "title": "Historical Safety Engineer",
+                "title": "Historical QA Automation Engineer",
                 "absolute_url": "https://example.com/jobs/501",
                 "location": {"name": "Remote"},
-                "content": "<p>Historical safety regression role.</p>",
+                "content": "<p>QA automation regression role. Sponsorship is mentioned but remains unclear.</p>",
                 "updated_at": "2026-04-23T10:00:00Z",
             }
         ]
@@ -170,10 +170,10 @@ def test_deleted_source_non_retained_job_uses_normal_not_found(client, monkeypat
         "jobs": [
             {
                 "id": 501,
-                "title": "Deleted Cleanup Engineer",
+                "title": "Deleted Cleanup QA Automation Engineer",
                 "absolute_url": "https://example.com/jobs/501",
                 "location": {"name": "Remote"},
-                "content": "<p>Deleted cleanup regression role.</p>",
+                "content": "<p>QA automation cleanup regression role. Sponsorship is mentioned but remains unclear.</p>",
                 "updated_at": "2026-04-23T10:00:00Z",
             }
         ]

@@ -20,7 +20,7 @@ def seed_job(client, monkeypatch):
                 "title": "QA Automation Engineer",
                 "absolute_url": "https://example.com/jobs/99",
                 "location": {"name": "Remote, Spain"},
-                "content": "<p>QA automation role. Sponsorship unclear.</p>",
+                "content": "<p>QA automation role with Python testing ownership. Sponsorship is unclear for this role.</p>",
                 "updated_at": "2026-04-23T10:00:00Z",
             }
         ]
@@ -45,10 +45,10 @@ def seed_job_with_source(client, monkeypatch):
         "jobs": [
             {
                 "id": 100,
-                "title": "Backend Platform Engineer",
+                "title": "Python Backend Engineer",
                 "absolute_url": "https://example.com/jobs/100",
                 "location": {"name": "Remote"},
-                "content": "<p>Platform engineering role with Python and backend ownership.</p>",
+                "content": "<p>Platform engineering role with Python and backend ownership. Visa sponsorship available.</p>",
                 "updated_at": "2026-04-23T11:00:00Z",
             }
         ]
@@ -75,12 +75,12 @@ def test_dashboard_and_jobs_html_render(client, monkeypatch):
     dashboard_response = client.get("/dashboard", headers={"accept": "text/html"})
     assert dashboard_response.status_code == 200
     assert "Dashboard" in dashboard_response.text
-    assert "Rejected" in dashboard_response.text
-    assert "Recent review jobs" in dashboard_response.text
+    assert "Rejected" not in dashboard_response.text
+    assert "Jobs needing attention" in dashboard_response.text
 
     jobs_response = client.get("/jobs", headers={"accept": "text/html"})
     assert jobs_response.status_code == 200
-    assert "Automated bucket" in jobs_response.text
+    assert "Bucket" in jobs_response.text
     assert "Tracking" in jobs_response.text
     assert "QA Automation Engineer" in jobs_response.text
 

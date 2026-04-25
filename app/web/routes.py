@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.adapters.base.registry import SourceAdapterRegistry
 from app.domain.ingestion import IngestionOrchestrator
-from app.domain.job_visibility import apply_visible_jobs, visible_job_predicate
+from app.domain.job_visibility import apply_main_display_jobs, apply_visible_jobs, visible_job_predicate
 from app.domain.notifications import NotificationService
 from app.domain.operations import OperationsService
 from app.domain.source_cleanup import run_source_delete_cleanup
@@ -226,7 +226,7 @@ def to_job_card(job: JobPosting, source: Source | None, decision: JobDecision | 
 
 
 def build_jobs_query(bucket: str | None, tracking_status: str | None, source_id: int | None, search: str | None):
-    query = apply_visible_jobs(select(JobPosting))
+    query = apply_main_display_jobs(select(JobPosting))
     if bucket:
         query = query.where(JobPosting.latest_bucket == bucket)
     if tracking_status:
@@ -358,7 +358,7 @@ async def parse_source_form(request: Request) -> tuple[dict[str, Any], SourceCre
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, session: Session = Depends(get_session_dependency)):
-    jobs = list(session.scalars(apply_visible_jobs(select(JobPosting))))
+    jobs = list(session.scalars(apply_main_display_jobs(select(JobPosting))))
     reminders = list(
         session.scalars(
             select(Reminder)
