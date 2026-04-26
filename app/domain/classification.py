@@ -6,6 +6,17 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.domain.common import clean_text, evidence_snippet
+from app.domain.job_preferences import (
+    DEFAULT_LOCATION_NEGATIVES,
+    DEFAULT_LOCATION_POSITIVES,
+    DEFAULT_REMOTE_POSITIVES,
+    DEFAULT_ROLE_NEGATIVES,
+    DEFAULT_ROLE_POSITIVES,
+    DEFAULT_SPONSORSHIP_AMBIGUOUS,
+    DEFAULT_SPONSORSHIP_SUPPORTED,
+    DEFAULT_SPONSORSHIP_UNSUPPORTED,
+    JobFilterPreferences,
+)
 from app.persistence.models import JobDecision, JobDecisionRule, JobPosting
 
 
@@ -20,20 +31,14 @@ class RuleResult:
     explanation_text: str
 
 
-ROLE_POSITIVES = {
-    "python backend": ["python backend", "backend engineer", "backend developer", "python engineer"],
-    "sdet": ["sdet", "software development engineer in test"],
-    "qa automation": ["qa automation", "quality assurance automation", "test automation"],
-    "test infrastructure": ["test infrastructure", "testing platform", "quality platform"],
-    "developer productivity": ["developer productivity", "developer experience", "engineering productivity"],
-}
-ROLE_NEGATIVES = ["sales", "account executive", "marketing", "recruiter", "designer", "hr", "finance"]
-REMOTE_POSITIVES = ["remote", "work from anywhere", "distributed"]
-SPAIN_POSITIVES = ["spain", "barcelona", "madrid"]
-LOCATION_NEGATIVES = ["on-site", "onsite", "must be located in", "us only"]
-SPONSORSHIP_UNSUPPORTED = ["no visa sponsorship", "unable to sponsor", "must be authorized to work"]
-SPONSORSHIP_SUPPORTED = ["visa sponsorship available", "sponsorship available", "will sponsor"]
-SPONSORSHIP_AMBIGUOUS = ["visa", "work authorization", "sponsorship"]
+ROLE_POSITIVES = DEFAULT_ROLE_POSITIVES
+ROLE_NEGATIVES = DEFAULT_ROLE_NEGATIVES
+REMOTE_POSITIVES = DEFAULT_REMOTE_POSITIVES
+SPAIN_POSITIVES = DEFAULT_LOCATION_POSITIVES
+LOCATION_NEGATIVES = DEFAULT_LOCATION_NEGATIVES
+SPONSORSHIP_UNSUPPORTED = DEFAULT_SPONSORSHIP_UNSUPPORTED
+SPONSORSHIP_SUPPORTED = DEFAULT_SPONSORSHIP_SUPPORTED
+SPONSORSHIP_AMBIGUOUS = DEFAULT_SPONSORSHIP_AMBIGUOUS
 
 
 class ClassificationService:
@@ -42,13 +47,13 @@ class ClassificationService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def classify_job(self, job: JobPosting) -> JobDecision:
+    def classify_job(self, job: JobPosting, preferences: JobFilterPreferences) -> JobDecision:
         text = " ".join(filter(None, [job.title, job.location_text, job.description_text, job.sponsorship_text]))
         lower = clean_text(text).lower()
         rules: list[RuleResult] = []
         score = 0
 
-        for family, keywords in ROLE_POSITIVES.items():
+        for family, keywords in preferences.role_positives.items():
             for keyword in keywords:
                 if keyword in lower:
                     rules.append(
@@ -65,7 +70,7 @@ class ClassificationService:
                     score += 18
                     break
 
-        for keyword in ROLE_NEGATIVES:
+        for keyword in preferences.role_negatives:
             if keyword in lower:
                 rules.append(
                     RuleResult(
@@ -81,33 +86,39 @@ class ClassificationService:
                 score -= 25
                 break
 
-        if any(keyword in lower for keyword in REMOTE_POSITIVES):
-            rules.append(RuleResult("remote_preferred", "location_positive", "matched", 10, evidence_snippet(text, "remote"), "location_text", "Role indicates remote availability."))
+        remote_match = next((keyword for keyword in preferences.remote_positives if keyword.lower() in lower), None)
+        if remote_match:
+            rules.append(RuleResult("remote_preferred", "location_positive", "matched", 10, evidence_snippet(text, remote_match), "location_text", "Role indicates remote availability."))
             score += 10
-        elif any(keyword in lower for keyword in SPAIN_POSITIVES):
-            rules.append(RuleResult("spain_preferred", "location_positive", "matched", 6, evidence_snippet(text, "spain") or evidence_snippet(text, "madrid") or evidence_snippet(text, "barcelona"), "location_text", "Role matches Spain secondary preference."))
-            score += 6
+        else:
+            location_match = next((keyword for keyword in preferences.location_positives if keyword.lower() in lower), None)
+            if location_match:
+                rules.append(RuleResult("location_preferred", "location_positive", "matched", 6, evidence_snippet(text, location_match), "location_text", "Role matches preferred location."))
+                score += 6
 
         location_negative = False
-        for keyword in LOCATION_NEGATIVES:
+        for keyword in preferences.location_negatives:
             if keyword in lower:
                 location_negative = True
-                rules.append(RuleResult("location_incompatible", "location_negative", "negative", -12, evidence_snippet(text, keyword), "location_text", "Location appears incompatible with MVP preferences."))
+                rules.append(RuleResult("location_incompatible", "location_negative", "negative", -12, evidence_snippet(text, keyword), "location_text", "Location appears incompatible with configured preferences."))
                 score -= 12
                 break
 
         sponsorship_state = "missing"
-        if any(keyword in lower for keyword in SPONSORSHIP_SUPPORTED):
+        supported_match = next((keyword for keyword in preferences.sponsorship_supported if keyword.lower() in lower), None)
+        unsupported_match = next((keyword for keyword in preferences.sponsorship_unsupported if keyword.lower() in lower), None)
+        ambiguous_match = next((keyword for keyword in preferences.sponsorship_ambiguous if keyword.lower() in lower), None)
+        if supported_match:
             sponsorship_state = "supported"
-            rules.append(RuleResult("sponsorship_supported", "sponsorship", "matched", 6, evidence_snippet(text, "sponsorship") or evidence_snippet(text, "visa"), "sponsorship_text", "Posting indicates sponsorship support."))
+            rules.append(RuleResult("sponsorship_supported", "sponsorship", "matched", 6, evidence_snippet(text, supported_match), "sponsorship_text", "Posting indicates sponsorship support."))
             score += 6
-        elif any(keyword in lower for keyword in SPONSORSHIP_UNSUPPORTED):
+        elif unsupported_match:
             sponsorship_state = "unsupported"
-            rules.append(RuleResult("sponsorship_unsupported", "sponsorship", "negative", -20, evidence_snippet(text, "sponsor") or evidence_snippet(text, "authorized"), "sponsorship_text", "Posting indicates sponsorship is not supported."))
+            rules.append(RuleResult("sponsorship_unsupported", "sponsorship", "negative", -20, evidence_snippet(text, unsupported_match), "sponsorship_text", "Posting indicates sponsorship is not supported."))
             score -= 20
-        elif any(keyword in lower for keyword in SPONSORSHIP_AMBIGUOUS):
+        elif ambiguous_match:
             sponsorship_state = "ambiguous"
-            rules.append(RuleResult("sponsorship_ambiguous", "sponsorship", "override", 0, evidence_snippet(text, "sponsorship") or evidence_snippet(text, "visa") or evidence_snippet(text, "authorization"), "sponsorship_text", "Sponsorship is mentioned but not resolved clearly."))
+            rules.append(RuleResult("sponsorship_ambiguous", "sponsorship", "override", 0, evidence_snippet(text, ambiguous_match), "sponsorship_text", "Sponsorship is mentioned but not resolved clearly."))
 
         if len(clean_text(job.description_text)) < 120:
             rules.append(RuleResult("low_text_confidence", "quality", "informational", -2, None, None, "Limited source text reduced confidence."))
