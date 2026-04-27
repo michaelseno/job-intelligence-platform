@@ -138,8 +138,8 @@
                     <a class="button button-secondary" href="/sources/{{ source.id }}/edit">Edit</a>
                     <a class="button button-danger" href="/sources/{{ source.id }}/delete">Delete</a>
                     {% if source.is_active %}
-                      <form method="post" action="/sources/{{ source.id }}/run" class="inline-form">
-                        <input type="hidden" name="next_url" value="/sources">
+                      <form method="post" action="/sources/{{ source.id }}/run" class="inline-form" data-requires-job-preferences-submit="true">
+                        <input type="hidden" name="next" value="/sources">
                         <button class="button button-secondary" type="submit">Run ingestion</button>
                       </form>
                     {% else %}

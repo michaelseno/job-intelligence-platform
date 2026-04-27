@@ -374,22 +374,15 @@ def job_preferences_page(request: Request, next: str | None = Query(default=None
     defaults = get_default_job_filter_preferences().model_dump()
     if not wants_html(request):
         return {"schema_version": defaults["schema_version"], "defaults": defaults, "next": safe_next}
-    defaults_json = json.dumps(defaults).replace("'", "&#39;")
-    return HTMLResponse(
-        f"""
-        <!doctype html>
-        <html lang="en">
-          <head><title>Job Preferences</title></head>
-          <body data-page-key="job_preferences">
-            <main>
-              <h1>Job Preferences</h1>
-              <p>Configure job filter preferences in the browser. Defaults are for setup only until saved.</p>
-              <div id="job-preferences-root" data-default-preferences='{defaults_json}' data-next='{safe_next or ""}'></div>
-            </main>
-          </body>
-        </html>
-        """,
-        status_code=200,
+    return render(
+        request,
+        session,
+        "preferences/job_preferences.html",
+        {
+            "page_key": "job_preferences",
+            "default_preferences": defaults,
+            "next_url": safe_next or "",
+        },
     )
 
 
@@ -497,6 +490,7 @@ def dashboard(request: Request, session: Session = Depends(get_session_dependenc
         "dashboard/index.html",
         {
             "page_key": "dashboard",
+            "requires_job_preferences": True,
             "summary": {
                 "matched": sum(1 for job in jobs if job.latest_bucket == "matched"),
                 "review": sum(1 for job in jobs if job.latest_bucket == "review"),
@@ -755,6 +749,14 @@ async def run_source(
     session: Session = Depends(get_session_dependency),
     registry: SourceAdapterRegistry = Depends(get_registry),
 ):
+    source_service = SourceService(session, registry)
+    try:
+        source = source_service.get_runnable_source(source_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if source is None:
+        raise HTTPException(status_code=404, detail="Source not found.")
+
     content_type = request.headers.get("content-type", "")
     next_url = None
     raw_preferences = None
@@ -779,13 +781,6 @@ async def run_source(
         preferences = validate_job_filter_preferences(raw_preferences)
     except JobFilterPreferencesError as exc:
         return preferences_error_response(exc)
-    source_service = SourceService(session, registry)
-    try:
-        source = source_service.get_runnable_source(source_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    if source is None:
-        raise HTTPException(status_code=404, detail="Source not found.")
     run = IngestionOrchestrator(session, registry).run_source(source, preferences)
     if wants_html(request) or content_type.startswith("application/x-www-form-urlencoded"):
         if run.status in {"success", "partial_success"}:
@@ -823,6 +818,7 @@ def list_jobs(
         "jobs/list.html",
         {
             "page_key": "jobs",
+            "requires_job_preferences": True,
             "jobs": job_cards,
             "filters": {
                 "bucket": bucket or "",
@@ -1072,7 +1068,7 @@ def latest_digest(request: Request, session: Session = Depends(get_session_depen
     digest = session.scalar(select(Digest).order_by(Digest.generated_at.desc()))
     if digest is None:
         if wants_html(request):
-            return render(request, session, "notifications/digest.html", {"page_key": "digest", "digest": None, "grouped_items": {}})
+            return render(request, session, "notifications/digest.html", {"page_key": "digest", "requires_job_preferences": True, "digest": None, "grouped_items": {}})
         return None
     items = list(session.scalars(select(DigestItem).where(DigestItem.digest_id == digest.id)))
     if wants_html(request):
@@ -1085,7 +1081,7 @@ def latest_digest(request: Request, session: Session = Depends(get_session_depen
             if job is None:
                 continue
             grouped_items[item.bucket].append({"item": item, "job": to_job_card(job, primary_sources.get(job.id), decisions.get(job.id))})
-        return render(request, session, "notifications/digest.html", {"page_key": "digest", "digest": digest, "grouped_items": grouped_items})
+        return render(request, session, "notifications/digest.html", {"page_key": "digest", "requires_job_preferences": True, "digest": digest, "grouped_items": grouped_items})
     visible_item_job_ids = set(
         session.scalars(apply_visible_jobs(select(JobPosting.id)).where(JobPosting.id.in_([item.job_posting_id for item in items])))
     ) if items else set()
@@ -1129,7 +1125,7 @@ def list_reminders(request: Request, session: Session = Depends(get_session_depe
         if job is None:
             continue
         grouped[reminder.status].append({"reminder": reminder, "job": to_job_card(job, primary_sources.get(job.id), decisions.get(job.id), reminder)})
-    return render(request, session, "notifications/reminders.html", {"page_key": "reminders", "grouped_reminders": dict(grouped)})
+    return render(request, session, "notifications/reminders.html", {"page_key": "reminders", "requires_job_preferences": True, "grouped_reminders": dict(grouped)})
 
 
 @router.post("/reminders/{reminder_id}/dismiss")

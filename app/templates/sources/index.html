@@ -38,7 +38,8 @@
                     <a class="btn btn--ghost btn--sm" href="/sources/{{ source.id }}">Open</a>
                     <a class="btn btn--ghost btn--sm" href="/sources/{{ source.id }}/edit">Edit source</a>
                     <a class="btn btn--ghost btn--sm btn--danger" href="/sources/{{ source.id }}/delete">Delete source</a>
-                    <form method="post" action="/sources/{{ source.id }}/run?next=/sources">
+                    <form method="post" action="/sources/{{ source.id }}/run" data-requires-job-preferences-submit="true">
+                      <input type="hidden" name="next" value="/sources">
                       <button class="btn btn--secondary btn--sm" type="submit">Run now</button>
                     </form>
                   </div>

@@ -44,6 +44,26 @@ def _custom_preferences() -> JobFilterPreferences:
     )
 
 
+def _visa_neutral_preferences() -> JobFilterPreferences:
+    preferences = get_default_job_filter_preferences()
+    return JobFilterPreferences(
+        schema_version=preferences.schema_version,
+        configured_at=preferences.configured_at,
+        role_positives=preferences.role_positives,
+        role_negatives=preferences.role_negatives,
+        remote_positives=preferences.remote_positives,
+        location_positives=preferences.location_positives,
+        location_negatives=preferences.location_negatives,
+        sponsorship_supported=[],
+        sponsorship_unsupported=[],
+        sponsorship_ambiguous=[],
+    )
+
+
+def _positive_role_description(sponsorship_text: str) -> str:
+    return f"Python backend engineer role building backend APIs for a distributed platform. {sponsorship_text} " * 3
+
+
 def test_custom_role_preferences_replace_hardcoded_terms(session):
     source = _source(session)
     job = _job(session, source, "Senior Python Backend Engineer", "Python backend engineer role. custom sponsor supported")
@@ -88,3 +108,111 @@ def test_default_preferences_preserve_existing_behavior(session):
     assert decision.bucket == "matched"
     assert decision.final_score == 34
     assert decision.sponsorship_state == "supported"
+
+
+def test_visa_neutral_unsupported_text_does_not_reject_or_force_review(session):
+    source = _source(session)
+    job = _job(
+        session,
+        source,
+        "Neutral Unsupported Python Backend Engineer",
+        _positive_role_description("We are unable to sponsor visas for this role."),
+        "Remote",
+        "Unable to sponsor visas.",
+    )
+
+    decision = ClassificationService(session).classify_job(job, _visa_neutral_preferences())
+
+    assert decision.bucket == "matched"
+    assert decision.final_score == 28
+    assert decision.sponsorship_state == "neutral"
+
+
+def test_visa_neutral_supported_text_does_not_boost_score(session):
+    source = _source(session)
+    job = _job(
+        session,
+        source,
+        "Neutral Supported Python Backend Engineer",
+        _positive_role_description("Visa sponsorship available."),
+        "Remote",
+        "Visa sponsorship available.",
+    )
+
+    decision = ClassificationService(session).classify_job(job, _visa_neutral_preferences())
+
+    assert decision.bucket == "matched"
+    assert decision.final_score == 28
+    assert decision.sponsorship_state == "neutral"
+
+
+def test_visa_neutral_ambiguous_text_does_not_force_review(session):
+    source = _source(session)
+    job = _job(
+        session,
+        source,
+        "Neutral Ambiguous Python Backend Engineer",
+        _positive_role_description("Sponsorship and work authorization can be discussed."),
+        "Remote",
+        "Sponsorship and work authorization can be discussed.",
+    )
+
+    decision = ClassificationService(session).classify_job(job, _visa_neutral_preferences())
+
+    assert decision.bucket == "matched"
+    assert decision.final_score == 28
+    assert decision.sponsorship_state == "neutral"
+
+
+def test_default_preferences_reject_unsupported_sponsorship_for_positive_role(session):
+    source = _source(session)
+    job = _job(
+        session,
+        source,
+        "Unsupported Python Backend Engineer",
+        _positive_role_description("We are unable to sponsor visas for this role."),
+        "Remote",
+        "Unable to sponsor visas.",
+    )
+
+    decision = ClassificationService(session).classify_job(job, get_default_job_filter_preferences())
+
+    assert decision.bucket == "rejected"
+    assert decision.final_score == 8
+    assert decision.sponsorship_state == "unsupported"
+
+
+def test_default_preferences_review_ambiguous_sponsorship_for_positive_role(session):
+    source = _source(session)
+    job = _job(
+        session,
+        source,
+        "Ambiguous Python Backend Engineer",
+        _positive_role_description("Sponsorship and work authorization can be discussed."),
+        "Remote",
+        "Sponsorship and work authorization can be discussed.",
+    )
+
+    decision = ClassificationService(session).classify_job(job, get_default_job_filter_preferences())
+
+    assert decision.bucket == "review"
+    assert decision.final_score == 28
+    assert decision.sponsorship_state == "ambiguous"
+
+
+def test_default_preferences_review_missing_sponsorship_for_positive_role(session):
+    source = _source(session)
+    job = _job(
+        session,
+        source,
+        "No Permit Text Python Backend Engineer",
+        "Python backend engineer role building backend APIs for a distributed platform. The posting describes backend API ownership. " * 3,
+        "Remote",
+        "",
+    )
+
+    decision = ClassificationService(session).classify_job(job, get_default_job_filter_preferences())
+
+    assert decision.bucket == "review"
+    assert decision.final_score == 28
+    assert decision.sponsorship_state == "missing"

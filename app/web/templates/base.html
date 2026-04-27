@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="{{ request.url_for('static', path='styles.css') }}">
   <script defer src="{{ request.url_for('static', path='app.js') }}"></script>
 </head>
-<body>
+<body data-page-key="{{ page_key|default('') }}"{% if requires_job_preferences|default(false) %} data-requires-job-preferences="true"{% endif %}>
   {% import 'includes/macros.html' as ui %}
   <header class="site-header">
     <div class="container site-header__inner">

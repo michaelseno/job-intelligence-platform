@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from app.domain.job_preferences import get_default_job_filter_preferences
 from app.persistence.models import Source
+
+
+def job_preferences_payload():
+    return get_default_job_filter_preferences().model_dump()
 
 
 class DummyResponse:
@@ -140,7 +145,7 @@ def test_source_created_with_true_checkbox_can_run_without_inactive_conflict(cli
     assert create_response.status_code == 303
     source = session.query(Source).filter_by(name="Runnable True Source").one()
 
-    run_response = client.post(f"/sources/{source.id}/run?next=/sources")
+    run_response = client.post(f"/sources/{source.id}/run?next=/sources", json={"job_preferences": job_preferences_payload()})
 
     assert run_response.status_code == 200
     assert run_response.json()["source_id"] == source.id

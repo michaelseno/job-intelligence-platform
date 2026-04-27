@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block title %}Job Preferences · Job Intelligence{% endblock %}
+{% block page_title %}Job Preferences{% endblock %}
+
+{% block content %}
+<section id="job-preferences-root" class="job-preferences" data-default-preferences='{{ default_preferences|tojson }}' data-next="{{ next_url }}">
+  <section class="page-header job-preferences-header">
+    <div>
+      <div class="eyebrow">Matching setup</div>
+      <h2 id="job-preferences-page-title">Set up Job Preferences</h2>
+      <p id="job-preferences-page-description">Answer a few questions so the app can filter and rank jobs for your search.</p>
+    </div>
+    <div class="preference-status" aria-live="polite">
+      <span id="job-preferences-status-badge" class="badge badge--warning">Setup required</span>
+      <p id="job-preferences-last-saved" class="muted">Not saved yet</p>
+    </div>
+  </section>
+
+  <div class="preference-alerts" aria-live="polite">
+    <div id="job-preferences-setup-callout" class="callout callout-warning"><strong>Setup required.</strong><p>Job matching is paused until preferences are saved. Defaults are not active until you complete setup.</p></div>
+    <div id="job-preferences-storage-error" class="alert alert--danger hidden" role="alert" tabindex="-1">Job Preferences cannot be saved because local browser storage is unavailable. Enable browser storage or try another browser before filtering jobs.</div>
+    <div id="job-preferences-message" class="alert hidden" tabindex="-1"></div>
+  </div>
+
+  <ol id="job-preferences-progress" class="wizard-progress" aria-label="Setup progress">
+    <li data-step-indicator="0" aria-current="step">Step 1 of 4: Job categories</li>
+    <li data-step-indicator="1">Step 2 of 4: Location</li>
+    <li data-step-indicator="2">Step 3 of 4: Work arrangement</li>
+    <li data-step-indicator="3">Step 4 of 4: Visa sponsorship</li>
+  </ol>
+
+  <form id="job-preferences-form" novalidate>
+    <section class="surface wizard-step" data-wizard-step="0">
+      <h2 tabindex="-1">Job categories</h2>
+      <p class="muted">Select one or more predefined categories. Custom categories are not saved.</p>
+      <label for="category-search">Search job categories</label>
+      <input id="category-search" data-category-search aria-describedby="category-help category-error">
+      <p id="category-help" class="field-help">Type to filter the approved category list.</p>
+      <fieldset id="category-group" class="option-grid" aria-describedby="category-error"></fieldset>
+      <p id="category-empty" class="field-help hidden">No matching predefined categories.</p>
+      <p id="category-summary" class="selected-summary">No categories selected.</p>
+      <p id="category-error" class="field-error" data-step-error="categories"></p>
+    </section>
+
+    <section class="surface wizard-step hidden" data-wizard-step="1">
+      <h2 tabindex="-1">Location</h2>
+      <p class="muted">Choose countries you are open to for your job search.</p>
+      <fieldset id="country-group" class="option-grid option-grid--countries" aria-describedby="country-error"></fieldset>
+      <p id="country-summary" class="selected-summary">No countries selected.</p>
+      <p id="country-error" class="field-error" data-step-error="countries"></p>
+    </section>
+
+    <section class="surface wizard-step hidden" data-wizard-step="2">
+      <h2 tabindex="-1">Work arrangement</h2>
+      <p class="muted">Remote, Hybrid, and On-site can be combined. Flexible / Any is exclusive and applies no work-arrangement restriction.</p>
+      <fieldset id="work-arrangement-group" class="option-grid" aria-describedby="work-arrangement-help work-arrangement-error">
+        <legend>Accepted work arrangements</legend>
+        <label><input type="checkbox" name="work_arrangements" value="remote"> Remote</label>
+        <label><input type="checkbox" name="work_arrangements" value="hybrid"> Hybrid</label>
+        <label><input type="checkbox" name="work_arrangements" value="onsite"> On-site</label>
+        <label><input type="checkbox" name="work_arrangements" value="any"> Flexible / Any</label>
+      </fieldset>
+      <p id="work-arrangement-help" class="field-help">Selecting Flexible / Any clears other choices.</p>
+      <p id="work-arrangement-error" class="field-error" data-step-error="work_arrangements"></p>
+    </section>
+
+    <section class="surface wizard-step hidden" data-wizard-step="3">
+      <h2 tabindex="-1">Visa sponsorship</h2>
+      <fieldset id="visa-group" aria-describedby="visa-help visa-error">
+        <legend>I require visa sponsorship</legend>
+        <label><input type="radio" name="requires_visa_sponsorship" value="true"> Yes</label>
+        <label><input type="radio" name="requires_visa_sponsorship" value="false"> No</label>
+      </fieldset>
+      <p id="visa-help" class="field-help">Yes uses sponsorship signals. No treats sponsorship as neutral.</p>
+      <p id="visa-error" class="field-error" data-step-error="requires_visa_sponsorship"></p>
+    </section>
+
+    <details id="advanced-settings" class="surface advanced-settings hidden">
+      <summary>Advanced settings</summary>
+      <p class="field-help">Optional keyword controls for matching behavior. Most users do not need to edit these.</p>
+      <div class="callout callout-warning">Changing the simple wizard answers above can update generated advanced criteria for roles, locations, work arrangement, and sponsorship.</div>
+      <div class="preference-family-list" id="advanced-role-families">
+        {% for family, keywords in default_preferences.role_positives.items() %}
+          {% set index = loop.index0 %}
+          <fieldset class="preference-family" data-role-family-index="{{ index }}">
+            <legend>Role family {{ loop.index }}</legend>
+            <div class="form-grid"><div class="field-group"><label for="role-family-name-{{ index }}">Family name</label><input id="role-family-name-{{ index }}" data-pref-field="role-family-name" value="{{ family }}"></div><div class="field-group field-group-wide"><label for="role-family-keywords-{{ index }}">Keywords for this family</label><textarea id="role-family-keywords-{{ index }}" data-pref-field="role-family-keywords" rows="4">{{ keywords|join('\n') }}</textarea></div></div>
+          </fieldset>
+        {% endfor %}
+      </div>
+      <div class="form-grid">
+        <div class="field-group field-group-wide"><label for="role-negatives">Negative role keywords</label><textarea id="role-negatives" data-pref-field="role_negatives" rows="4"></textarea></div>
+        <div class="field-group field-group-wide"><label for="remote-positives">Work arrangement positive keywords</label><textarea id="remote-positives" data-pref-field="remote_positives" rows="4"></textarea></div>
+        <div class="field-group field-group-wide"><label for="location-positives">Preferred location keywords</label><textarea id="location-positives" data-pref-field="location_positives" rows="4"></textarea></div>
+        <div class="field-group field-group-wide"><label for="location-negatives">Incompatible location keywords</label><textarea id="location-negatives" data-pref-field="location_negatives" rows="4"></textarea></div>
+        <div class="field-group field-group-wide"><label for="sponsorship-supported">Sponsorship supported keywords</label><textarea id="sponsorship-supported" data-pref-field="sponsorship_supported" rows="4"></textarea></div>
+        <div class="field-group field-group-wide"><label for="sponsorship-unsupported">Sponsorship unsupported keywords</label><textarea id="sponsorship-unsupported" data-pref-field="sponsorship_unsupported" rows="4"></textarea></div>
+        <div class="field-group field-group-wide"><label for="sponsorship-ambiguous">Sponsorship ambiguous keywords</label><textarea id="sponsorship-ambiguous" data-pref-field="sponsorship_ambiguous" rows="4"></textarea></div>
+      </div>
+    </details>
+
+    <section class="callout callout-info preference-apply-notice"><h2>How changes apply</h2><p id="job-preferences-apply-copy">Changes apply only after you save. Until then, filtering and matching continue to use your last saved preferences.</p></section>
+    <div class="button-row preference-actions"><button id="wizard-back" class="btn btn--secondary hidden" type="button">Back</button><button id="wizard-next" class="btn btn--primary" type="button">Continue</button><button id="job-preferences-save" class="btn btn--primary hidden" type="submit">Save preferences</button><button id="job-preferences-reset" class="btn btn--secondary hidden" type="button">Reset draft to saved values</button><a id="job-preferences-continue" class="btn btn--secondary hidden" href="/jobs">Continue</a><span id="job-preferences-unsaved-note" class="muted hidden">Unsaved changes. Matching still uses your last saved preferences.</span></div>
+  </form>
+</section>
+{% endblock %}

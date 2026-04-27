@@ -114,6 +114,31 @@ tbody tr:hover { background: #fafbfc; }
 .rich-copy { white-space: pre-wrap; color: var(--text-secondary); }
 .list-group h3 { margin-bottom: 10px; }
 .reminder-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-default); }
+.hidden { display: none !important; }
+.job-preferences-header { align-items: flex-start; }
+.preference-status { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.preference-status p { margin: 0; }
+.preference-alerts, .preference-family-list { display: grid; gap: 12px; }
+.preference-family-list { margin-top: 16px; }
+.preference-family { border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 16px; }
+.preference-family legend { font-weight: 600; padding: 0 6px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.field-group { display: grid; gap: 8px; }
+.field-group-wide { grid-column: span 2; }
+.field-help { color: var(--text-tertiary); font-size: 13px; margin: 0; }
+.callout { border-radius: var(--radius-lg); padding: 16px 18px; border: 1px solid var(--border-default); }
+.callout-warning { background: var(--warning-50); border-color: #fde68a; }
+.callout-info { background: var(--info-50); border-color: #bae6fd; }
+.button-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.preference-actions { margin-bottom: 24px; }
+.wizard-progress { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
+.wizard-progress li { border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 10px 12px; background: var(--bg-surface); color: var(--text-secondary); font-size: 13px; }
+.wizard-progress li[aria-current="step"] { border-color: var(--brand-600); background: var(--brand-50); color: var(--brand-700); font-weight: 600; }
+.option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; border: 0; padding: 0; margin: 12px 0; }
+.option-grid label, #visa-group label { display: flex; gap: 8px; align-items: center; border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 10px 12px; background: var(--bg-surface-subtle); }
+.option-grid input, #visa-group input { width: auto; }
+.selected-summary { color: var(--text-secondary); font-size: 13px; margin: 8px 0 0; }
+.advanced-settings summary { cursor: pointer; font-weight: 700; }
 @media (max-width: 1279px) {
   .app-shell { grid-template-columns: 96px 1fr; }
   .sidebar { align-items: center; padding-inline: 10px; }

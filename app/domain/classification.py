@@ -104,21 +104,23 @@ class ClassificationService:
                 score -= 12
                 break
 
-        sponsorship_state = "missing"
-        supported_match = next((keyword for keyword in preferences.sponsorship_supported if keyword.lower() in lower), None)
-        unsupported_match = next((keyword for keyword in preferences.sponsorship_unsupported if keyword.lower() in lower), None)
-        ambiguous_match = next((keyword for keyword in preferences.sponsorship_ambiguous if keyword.lower() in lower), None)
-        if supported_match:
-            sponsorship_state = "supported"
-            rules.append(RuleResult("sponsorship_supported", "sponsorship", "matched", 6, evidence_snippet(text, supported_match), "sponsorship_text", "Posting indicates sponsorship support."))
-            score += 6
-        elif unsupported_match:
-            sponsorship_state = "unsupported"
-            rules.append(RuleResult("sponsorship_unsupported", "sponsorship", "negative", -20, evidence_snippet(text, unsupported_match), "sponsorship_text", "Posting indicates sponsorship is not supported."))
-            score -= 20
-        elif ambiguous_match:
-            sponsorship_state = "ambiguous"
-            rules.append(RuleResult("sponsorship_ambiguous", "sponsorship", "override", 0, evidence_snippet(text, ambiguous_match), "sponsorship_text", "Sponsorship is mentioned but not resolved clearly."))
+        sponsorship_enabled = bool(preferences.sponsorship_supported or preferences.sponsorship_unsupported or preferences.sponsorship_ambiguous)
+        sponsorship_state = "missing" if sponsorship_enabled else "neutral"
+        if sponsorship_enabled:
+            supported_match = next((keyword for keyword in preferences.sponsorship_supported if keyword.lower() in lower), None)
+            unsupported_match = next((keyword for keyword in preferences.sponsorship_unsupported if keyword.lower() in lower), None)
+            ambiguous_match = next((keyword for keyword in preferences.sponsorship_ambiguous if keyword.lower() in lower), None)
+            if supported_match:
+                sponsorship_state = "supported"
+                rules.append(RuleResult("sponsorship_supported", "sponsorship", "matched", 6, evidence_snippet(text, supported_match), "sponsorship_text", "Posting indicates sponsorship support."))
+                score += 6
+            elif unsupported_match:
+                sponsorship_state = "unsupported"
+                rules.append(RuleResult("sponsorship_unsupported", "sponsorship", "negative", -20, evidence_snippet(text, unsupported_match), "sponsorship_text", "Posting indicates sponsorship is not supported."))
+                score -= 20
+            elif ambiguous_match:
+                sponsorship_state = "ambiguous"
+                rules.append(RuleResult("sponsorship_ambiguous", "sponsorship", "override", 0, evidence_snippet(text, ambiguous_match), "sponsorship_text", "Sponsorship is mentioned but not resolved clearly."))
 
         if len(clean_text(job.description_text)) < 120:
             rules.append(RuleResult("low_text_confidence", "quality", "informational", -2, None, None, "Limited source text reduced confidence."))
@@ -130,10 +132,10 @@ class ClassificationService:
         if explicit_role_negative and score < 10:
             bucket = "rejected"
             summary = "Rejected due to clear role mismatch."
-        elif sponsorship_state in {"ambiguous", "missing"} and positive_role:
+        elif sponsorship_enabled and sponsorship_state in {"ambiguous", "missing"} and positive_role:
             bucket = "review"
             summary = "Review because sponsorship is unclear or missing despite role alignment."
-        elif sponsorship_state == "unsupported" and positive_role:
+        elif sponsorship_enabled and sponsorship_state == "unsupported" and positive_role:
             bucket = "rejected"
             summary = "Rejected because sponsorship is explicitly unsupported."
         elif positive_role and not location_negative and score >= 25:
