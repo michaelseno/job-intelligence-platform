@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from app.domain.job_preferences import get_default_job_filter_preferences
+
+
+def job_preferences_payload():
+    return get_default_job_filter_preferences().model_dump()
+
 
 class DummyResponse:
     def __init__(self, payload):
@@ -36,7 +42,7 @@ def seed_job(client, monkeypatch):
             "company_name": "Example",
         },
     ).json()
-    client.post(f"/sources/{source['id']}/run")
+    client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
     return client.get("/jobs").json()[0]
 
 
@@ -64,7 +70,7 @@ def seed_job_with_source(client, monkeypatch):
             "company_name": "Filterable",
         },
     ).json()
-    client.post(f"/sources/{source['id']}/run")
+    client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
     job = client.get("/jobs").json()[0]
     return source, job
 

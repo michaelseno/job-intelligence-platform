@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,12 @@ from sqlalchemy.orm import Session
 
 from app.adapters.base.registry import SourceAdapterRegistry
 from app.domain.ingestion import IngestionOrchestrator
+from app.domain.job_preferences import (
+    JobFilterPreferencesError,
+    get_default_job_filter_preferences,
+    reclassify_active_jobs,
+    validate_job_filter_preferences,
+)
 from app.domain.job_visibility import apply_main_display_jobs, apply_visible_jobs, visible_job_predicate
 from app.domain.notifications import NotificationService
 from app.domain.operations import OperationsService
@@ -129,6 +136,30 @@ def redirect(url: str, status_code: int = status.HTTP_303_SEE_OTHER) -> Redirect
     return RedirectResponse(url=url, status_code=status_code)
 
 
+def is_safe_relative_path(value: str | None) -> bool:
+    if not value:
+        return False
+    parts = urlsplit(value)
+    return not parts.scheme and not parts.netloc and value.startswith("/") and not value.startswith("//")
+
+
+def preferences_error_response(exc: JobFilterPreferencesError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={"detail": {"message": "Invalid job filter preferences.", "errors": exc.errors}},
+    )
+
+
+def missing_preferences_response() -> JSONResponse:
+    return JSONResponse(status_code=status.HTTP_409_CONFLICT, content={"detail": "Job filter preferences are required."})
+
+
+def extract_preferences_from_payload(payload: Any) -> Any:
+    if isinstance(payload, dict) and "job_preferences" in payload:
+        return payload.get("job_preferences")
+    return payload
+
+
 def map_source_errors(errors: list[str]) -> dict[str, list[str]]:
     field_map: dict[str, list[str]] = defaultdict(list)
     for error in errors:
@@ -153,6 +184,7 @@ def build_base_context(request: Request, session: Session) -> dict[str, Any]:
         "request": request,
         "nav_items": [
             {"label": "Dashboard", "href": "/dashboard", "key": "dashboard"},
+            {"label": "Job Preferences", "href": "/job-preferences", "key": "job_preferences"},
             {"label": "Jobs", "href": "/jobs", "key": "jobs"},
             {"label": "Sources", "href": "/sources", "key": "sources"},
             {"label": "Source Health", "href": "/source-health", "key": "source_health"},
@@ -336,6 +368,66 @@ def build_source_form_context(source: Source, form_data: dict[str, Any] | None =
     }
 
 
+@router.get("/job-preferences", response_class=HTMLResponse)
+def job_preferences_page(request: Request, next: str | None = Query(default=None), session: Session = Depends(get_session_dependency)):
+    safe_next = next if is_safe_relative_path(next) else None
+    defaults = get_default_job_filter_preferences().model_dump()
+    if not wants_html(request):
+        return {"schema_version": defaults["schema_version"], "defaults": defaults, "next": safe_next}
+    return render(
+        request,
+        session,
+        "preferences/job_preferences.html",
+        {
+            "page_key": "job_preferences",
+            "default_preferences": defaults,
+            "next_url": safe_next or "",
+        },
+    )
+
+
+@router.post("/job-preferences/validate-and-reclassify")
+async def validate_and_reclassify_preferences(request: Request, session: Session = Depends(get_session_dependency)):
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail="Request body must be valid JSON.") from exc
+    try:
+        preferences = validate_job_filter_preferences(extract_preferences_from_payload(payload))
+    except JobFilterPreferencesError as exc:
+        return preferences_error_response(exc)
+    try:
+        count = reclassify_active_jobs(session, preferences)
+        session.commit()
+    except Exception as exc:
+        session.rollback()
+        raise HTTPException(status_code=500, detail="Job reclassification failed.") from exc
+    requested_next = payload.get("next") if isinstance(payload, dict) else None
+    return {
+        "preferences": preferences.model_dump(),
+        "reclassification": {"jobs_reclassified": count},
+        "next": requested_next if is_safe_relative_path(requested_next) else None,
+    }
+
+
+@router.post("/jobs/reclassify")
+async def reclassify_jobs(request: Request, session: Session = Depends(get_session_dependency)):
+    try:
+        payload = await request.json()
+    except Exception:
+        return missing_preferences_response()
+    raw_preferences = payload.get("job_preferences") if isinstance(payload, dict) else None
+    if raw_preferences is None:
+        return missing_preferences_response()
+    try:
+        preferences = validate_job_filter_preferences(raw_preferences)
+    except JobFilterPreferencesError as exc:
+        return preferences_error_response(exc)
+    count = reclassify_active_jobs(session, preferences)
+    session.commit()
+    return {"jobs_reclassified": count}
+
+
 async def parse_source_form(request: Request) -> tuple[dict[str, Any], SourceCreateRequest]:
     form = await request.form()
     form_data = {
@@ -398,6 +490,7 @@ def dashboard(request: Request, session: Session = Depends(get_session_dependenc
         "dashboard/index.html",
         {
             "page_key": "dashboard",
+            "requires_job_preferences": True,
             "summary": {
                 "matched": sum(1 for job in jobs if job.latest_bucket == "matched"),
                 "review": sum(1 for job in jobs if job.latest_bucket == "review"),
@@ -650,10 +743,9 @@ def delete_source_submit(
 
 
 @router.post("/sources/{source_id}/run")
-def run_source(
+async def run_source(
     request: Request,
     source_id: int,
-    next_url: str | None = Form(default=None),
     session: Session = Depends(get_session_dependency),
     registry: SourceAdapterRegistry = Depends(get_registry),
 ):
@@ -664,8 +756,33 @@ def run_source(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if source is None:
         raise HTTPException(status_code=404, detail="Source not found.")
-    run = IngestionOrchestrator(session, registry).run_source(source)
-    if wants_html(request) or request.headers.get("content-type", "").startswith("application/x-www-form-urlencoded"):
+
+    content_type = request.headers.get("content-type", "")
+    next_url = None
+    raw_preferences = None
+    if content_type.startswith("application/json"):
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = None
+        raw_preferences = payload.get("job_preferences") if isinstance(payload, dict) else None
+    elif content_type.startswith("application/x-www-form-urlencoded") or content_type.startswith("multipart/form-data"):
+        form = await request.form()
+        next_url = str(form.get("next") or "") or None
+        raw_preferences_json = form.get("job_preferences_json")
+        if raw_preferences_json:
+            try:
+                raw_preferences = json.loads(str(raw_preferences_json))
+            except json.JSONDecodeError:
+                return preferences_error_response(JobFilterPreferencesError({"job_preferences_json": ["Must contain valid JSON."]}))
+    if raw_preferences is None:
+        return missing_preferences_response()
+    try:
+        preferences = validate_job_filter_preferences(raw_preferences)
+    except JobFilterPreferencesError as exc:
+        return preferences_error_response(exc)
+    run = IngestionOrchestrator(session, registry).run_source(source, preferences)
+    if wants_html(request) or content_type.startswith("application/x-www-form-urlencoded"):
         if run.status in {"success", "partial_success"}:
             return redirect(with_message(next_url or f"/sources/{source_id}", "success", f"Ingestion finished for {source.name}: fetched {run.jobs_fetched_count} jobs."))
         else:
@@ -701,6 +818,7 @@ def list_jobs(
         "jobs/list.html",
         {
             "page_key": "jobs",
+            "requires_job_preferences": True,
             "jobs": job_cards,
             "filters": {
                 "bucket": bucket or "",
@@ -950,7 +1068,7 @@ def latest_digest(request: Request, session: Session = Depends(get_session_depen
     digest = session.scalar(select(Digest).order_by(Digest.generated_at.desc()))
     if digest is None:
         if wants_html(request):
-            return render(request, session, "notifications/digest.html", {"page_key": "digest", "digest": None, "grouped_items": {}})
+            return render(request, session, "notifications/digest.html", {"page_key": "digest", "requires_job_preferences": True, "digest": None, "grouped_items": {}})
         return None
     items = list(session.scalars(select(DigestItem).where(DigestItem.digest_id == digest.id)))
     if wants_html(request):
@@ -963,7 +1081,7 @@ def latest_digest(request: Request, session: Session = Depends(get_session_depen
             if job is None:
                 continue
             grouped_items[item.bucket].append({"item": item, "job": to_job_card(job, primary_sources.get(job.id), decisions.get(job.id))})
-        return render(request, session, "notifications/digest.html", {"page_key": "digest", "digest": digest, "grouped_items": grouped_items})
+        return render(request, session, "notifications/digest.html", {"page_key": "digest", "requires_job_preferences": True, "digest": digest, "grouped_items": grouped_items})
     visible_item_job_ids = set(
         session.scalars(apply_visible_jobs(select(JobPosting.id)).where(JobPosting.id.in_([item.job_posting_id for item in items])))
     ) if items else set()
@@ -1007,7 +1125,7 @@ def list_reminders(request: Request, session: Session = Depends(get_session_depe
         if job is None:
             continue
         grouped[reminder.status].append({"reminder": reminder, "job": to_job_card(job, primary_sources.get(job.id), decisions.get(job.id), reminder)})
-    return render(request, session, "notifications/reminders.html", {"page_key": "reminders", "grouped_reminders": dict(grouped)})
+    return render(request, session, "notifications/reminders.html", {"page_key": "reminders", "requires_job_preferences": True, "grouped_reminders": dict(grouped)})
 
 
 @router.post("/reminders/{reminder_id}/dismiss")

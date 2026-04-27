@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.domain.classification import ClassificationService
+from app.domain.job_preferences import get_default_job_filter_preferences
 from app.persistence.models import JobPosting, Source
 
 
@@ -22,7 +23,7 @@ def test_ambiguous_sponsorship_defaults_to_review(session):
     session.add(job)
     session.flush()
 
-    decision = ClassificationService(session).classify_job(job)
+    decision = ClassificationService(session).classify_job(job, get_default_job_filter_preferences())
 
     assert decision.bucket == "review"
     assert decision.sponsorship_state == "ambiguous"

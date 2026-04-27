@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
+from app.domain.job_preferences import get_default_job_filter_preferences
 from app.persistence.models import JobTrackingEvent, Reminder
 
 
@@ -16,6 +17,10 @@ class DummyResponse:
 
     def json(self):
         return self._payload
+
+
+def job_preferences_payload():
+    return get_default_job_filter_preferences().model_dump()
 
 
 def test_manual_source_ingestion_keep_tracking_digest_and_reminders(client, session, monkeypatch):
@@ -46,7 +51,7 @@ def test_manual_source_ingestion_keep_tracking_digest_and_reminders(client, sess
     assert create_response.status_code == 201
     source_id = create_response.json()["id"]
 
-    run_response = client.post(f"/sources/{source_id}/run")
+    run_response = client.post(f"/sources/{source_id}/run", json={"job_preferences": job_preferences_payload()})
     assert run_response.status_code == 200
     assert run_response.json()["jobs_fetched_count"] == 1
 
@@ -129,7 +134,7 @@ def test_jobs_api_treats_empty_source_filter_as_unset_and_keeps_integer_filterin
     assert create_response.status_code == 201
     source_id = create_response.json()["id"]
 
-    run_response = client.post(f"/sources/{source_id}/run")
+    run_response = client.post(f"/sources/{source_id}/run", json={"job_preferences": job_preferences_payload()})
     assert run_response.status_code == 200
 
     empty_filter_response = client.get("/jobs?source_id=")

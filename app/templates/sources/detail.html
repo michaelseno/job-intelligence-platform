@@ -10,7 +10,10 @@
     <p>{{ source.base_url }}{% if source.company_name %} · {{ source.company_name }}{% endif %}</p>
   </div>
   <div class="page-actions">
-    <form method="post" action="/sources/{{ source.id }}/run?next=/sources/{{ source.id }}"><button class="btn btn--primary" type="submit">Run now</button></form>
+    <form method="post" action="/sources/{{ source.id }}/run" data-requires-job-preferences-submit="true">
+      <input type="hidden" name="next" value="/sources/{{ source.id }}">
+      <button class="btn btn--primary" type="submit">Run now</button>
+    </form>
     <a class="btn btn--secondary" href="/sources/{{ source.id }}/edit">Edit source</a>
     <a class="btn btn--ghost btn--danger" href="/sources/{{ source.id }}/delete">Delete source</a>
   </div>

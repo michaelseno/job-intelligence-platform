@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from app.domain.job_preferences import get_default_job_filter_preferences
 from app.persistence.models import JobPosting, JobSourceLink, Source, SourceRun, utcnow
+
+
+def job_preferences_payload():
+    return get_default_job_filter_preferences().model_dump()
 
 
 class DummyResponse:
@@ -61,7 +66,7 @@ def test_source_delete_confirmation_explains_async_cleanup_and_retention(client,
 
     source = create_source(client, name="Historical Source", base_slug="historical-source")
 
-    run_response = client.post(f"/sources/{source['id']}/run")
+    run_response = client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
     assert run_response.status_code == 200
 
     jobs_response = client.get("/jobs")
@@ -182,7 +187,7 @@ def test_deleted_source_non_retained_job_uses_normal_not_found(client, monkeypat
 
     source = create_source(client, name="Deleted Cleanup Source", base_slug="deleted-cleanup-source")
 
-    run_response = client.post(f"/sources/{source['id']}/run")
+    run_response = client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
     assert run_response.status_code == 200
 
     jobs_response = client.get("/jobs")

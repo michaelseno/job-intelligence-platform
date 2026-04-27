@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.adapters.base.registry import SourceAdapterRegistry
 from app.domain.classification import ClassificationService
 from app.domain.common import fingerprint, normalize_url, payload_hash, utcnow
+from app.domain.job_preferences import JobFilterPreferences
 from app.persistence.models import JobPosting, JobSourceLink, Source, SourceRun
 
 
@@ -15,7 +16,7 @@ class IngestionOrchestrator:
         self.registry = registry
         self.classifier = ClassificationService(session)
 
-    def run_source(self, source: Source, trigger_type: str = "manual") -> SourceRun:
+    def run_source(self, source: Source, preferences: JobFilterPreferences, trigger_type: str = "manual") -> SourceRun:
         run = SourceRun(source_id=source.id, trigger_type=trigger_type, status="running")
         self.session.add(run)
         self.session.flush()
@@ -39,7 +40,7 @@ class IngestionOrchestrator:
                     updated += 1
                 else:
                     unchanged += 1
-                self.classifier.classify_job(job)
+                self.classifier.classify_job(job, preferences)
 
             run.status = "success" if not warnings else "partial_success"
             run.jobs_fetched_count = len(result.jobs)
