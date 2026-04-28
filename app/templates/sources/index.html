@@ -88,10 +88,60 @@
 
     <article class="surface" id="import-panel">
       <div class="section-heading"><h3>Import CSV</h3></div>
-      {% if import_result %}<div class="alert alert--success">Imported {{ import_result.created_count|default(0) }} sources.</div>{% endif %}
+      {% if import_result %}
+        {% set created_count = import_result.created|default(0) %}
+        {% set skipped_count = import_result.skipped_duplicate|default(0) %}
+        {% set invalid_count = import_result.invalid|default(0) %}
+        {% if invalid_count > 0 and created_count == 0 %}
+          {% set alert_tone = 'danger' %}
+          {% set alert_title = 'Import completed with validation errors' %}
+          {% set alert_body = 'No sources were imported. Review the invalid rows below and update the CSV before retrying.' %}
+        {% elif invalid_count > 0 %}
+          {% set alert_tone = 'warning' %}
+          {% set alert_title = 'Import partially completed' %}
+          {% set alert_body = 'Some sources were imported, but one or more rows need attention.' %}
+        {% elif created_count > 0 %}
+          {% set alert_tone = 'success' %}
+          {% set alert_title = 'Import completed' %}
+          {% set alert_body = created_count ~ ' source' ~ ('' if created_count == 1 else 's') ~ ' imported.' %}
+        {% else %}
+          {% set alert_tone = 'warning' %}
+          {% set alert_title = 'No new sources imported' %}
+          {% set alert_body = 'No new sources were created. Review skipped duplicate rows below.' %}
+        {% endif %}
+        <section class="alert alert--{{ alert_tone }}" role="{{ 'alert' if invalid_count > 0 else 'status' }}" aria-labelledby="import-result-title">
+          <div class="alert__title" id="import-result-title">{{ alert_title }}</div>
+          <p>{{ alert_body }}</p>
+          <dl class="detail-list" aria-label="CSV import summary">
+            <div><dt>Created</dt><dd>{{ created_count }}</dd></div>
+            <div><dt>Skipped duplicates</dt><dd>{{ skipped_count }}</dd></div>
+            <div><dt>Invalid rows</dt><dd>{{ invalid_count }}</dd></div>
+          </dl>
+        </section>
+        {% if import_result.rows %}
+          <div class="table-wrap" aria-labelledby="import-rows-title">
+            <table>
+              <caption id="import-rows-title">CSV import row results</caption>
+              <thead><tr><th scope="col">Row</th><th scope="col">Status</th><th scope="col">Message</th></tr></thead>
+              <tbody>
+                {% for row in import_result.rows %}
+                  {% set status_label = row.status|replace('_', ' ')|title %}
+                  {% set status_tone = 'success' if row.status == 'created' else ('warning' if row.status == 'skipped_duplicate' else ('danger' if row.status == 'invalid' else 'neutral')) %}
+                  <tr>
+                    <td>{{ row.row_number }}</td>
+                    <td>{{ ui.badge(status_label, status_tone) }}</td>
+                    <td>{{ row.message }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
+      {% endif %}
       <form method="post" action="/sources/import" enctype="multipart/form-data" class="stack-form">
-        <label>CSV file</label>
-        <input type="file" name="file" accept=".csv,text/csv" required>
+        <label for="source-import-file">CSV file</label>
+        <input id="source-import-file" type="file" name="file" accept=".csv,text/csv" required aria-describedby="source-import-help">
+        <p class="helper-text" id="source-import-help">Expected columns: name, source_type, base_url, external_identifier, adapter_key, company_name, is_active, notes.</p>
         <button class="btn btn--secondary" type="submit">Import sources</button>
       </form>
     </article>

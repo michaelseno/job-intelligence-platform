@@ -187,16 +187,21 @@ class SourceService:
         rows: list[SourceImportRowResult] = []
         created = skipped_duplicate = invalid = 0
         for idx, row in enumerate(reader, start=2):
+            row_errors = validate_csv_row_shape(row)
+            if row_errors:
+                invalid += 1
+                rows.append(SourceImportRowResult(row_number=idx, status="invalid", message="; ".join(row_errors)))
+                continue
             try:
                 payload = SourceCreateRequest(
-                    name=row.get("name", ""),
-                    source_type=row.get("source_type", ""),
-                    base_url=row.get("base_url", ""),
-                    external_identifier=row.get("external_identifier") or None,
-                    adapter_key=row.get("adapter_key") or None,
-                    company_name=row.get("company_name") or None,
-                    is_active=(row.get("is_active", "true").strip().lower() not in {"false", "0", "no"}),
-                    notes=row.get("notes") or None,
+                    name=clean_csv_value(row.get("name")),
+                    source_type=clean_csv_value(row.get("source_type")).lower(),
+                    base_url=clean_csv_value(row.get("base_url")),
+                    external_identifier=clean_csv_optional_value(row.get("external_identifier")),
+                    adapter_key=clean_csv_optional_value(row.get("adapter_key")),
+                    company_name=clean_csv_optional_value(row.get("company_name")),
+                    is_active=parse_csv_is_active(row.get("is_active")),
+                    notes=clean_csv_optional_value(row.get("notes")),
                 )
             except Exception as exc:
                 invalid += 1
@@ -221,3 +226,31 @@ def build_source_dedupe_key(source_type: str, base_url: str, external_identifier
     return "|".join(
         [slugify(source_type), slugify(adapter_key), normalize_url(base_url), slugify(external_identifier)]
     )
+
+
+def validate_csv_row_shape(row: dict[str | None, str | list[str] | None]) -> list[str]:
+    errors: list[str] = []
+    extra_fields = row.get(None)
+    if extra_fields:
+        errors.append("Malformed CSV row: unexpected extra fields found. Quote values that contain commas.")
+    return errors
+
+
+def clean_csv_value(value: str | list[str] | None) -> str:
+    if isinstance(value, list):
+        return " ".join(str(item).strip() for item in value if item is not None).strip()
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def clean_csv_optional_value(value: str | list[str] | None) -> str | None:
+    cleaned = clean_csv_value(value)
+    return cleaned or None
+
+
+def parse_csv_is_active(value: str | list[str] | None) -> bool:
+    cleaned = clean_csv_value(value)
+    if not cleaned:
+        cleaned = "true"
+    return cleaned.lower() not in {"false", "0", "no"}

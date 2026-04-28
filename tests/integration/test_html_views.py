@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from io import BytesIO
+
 from app.domain.job_preferences import get_default_job_filter_preferences
 
 
@@ -126,3 +128,43 @@ def test_jobs_html_treats_empty_source_filter_as_unset(client, monkeypatch):
 
     assert response.status_code == 200
     assert job["title"] in response.text
+
+
+def test_sources_import_html_renders_created_skipped_and_invalid_rows(client):
+    csv_header = "name,source_type,base_url,external_identifier,adapter_key,company_name,is_active,notes\n"
+    valid_csv = csv_header + "Example Greenhouse,Greenhouse,https://boards.greenhouse.io/example,example,,Example,true,Initial import\n"
+
+    created_response = client.post(
+        "/sources/import",
+        headers={"accept": "text/html"},
+        files={"file": ("sources.csv", BytesIO(valid_csv.encode("utf-8")), "text/csv")},
+    )
+
+    assert created_response.status_code == 200
+    assert "Import completed" in created_response.text
+    assert "Created" in created_response.text
+    assert "Skipped duplicates" in created_response.text
+    assert "Invalid rows" in created_response.text
+    assert "<dd>1</dd>" in created_response.text
+    assert "Created</span>" in created_response.text
+    assert "source created" in created_response.text
+
+    mixed_csv = (
+        csv_header
+        + "Example Greenhouse,Greenhouse,https://boards.greenhouse.io/example,example,,Example,true,Duplicate import\n"
+        + "Malformed Greenhouse,Greenhouse,https://boards.greenhouse.io/malformed,malformed,,Malformed,true,notes with comma,extra field\n"
+    )
+
+    mixed_response = client.post(
+        "/sources/import",
+        headers={"accept": "text/html"},
+        files={"file": ("sources.csv", BytesIO(mixed_csv.encode("utf-8")), "text/csv")},
+    )
+
+    assert mixed_response.status_code == 200
+    assert "Import completed with validation errors" in mixed_response.text
+    assert "No sources were imported. Review the invalid rows below" in mixed_response.text
+    assert "Skipped Duplicate</span>" in mixed_response.text
+    assert "Invalid</span>" in mixed_response.text
+    assert "Duplicate source already exists." in mixed_response.text
+    assert "Malformed CSV row: unexpected extra fields found. Quote values that contain commas." in mixed_response.text
