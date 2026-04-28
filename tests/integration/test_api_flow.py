@@ -5,7 +5,7 @@ from datetime import timedelta
 from sqlalchemy import select
 
 from app.domain.job_preferences import get_default_job_filter_preferences
-from app.persistence.models import JobTrackingEvent, Reminder
+from app.persistence.models import JobTrackingEvent, Reminder, Source
 
 
 class DummyResponse:
@@ -104,6 +104,85 @@ def test_csv_import_mixed_valid_invalid_and_duplicate(client):
     assert data["created"] == 1
     assert data["invalid"] == 1
     assert data["skipped_duplicate"] == 1
+
+
+def test_csv_import_normalizes_title_cased_source_type(client, session):
+    csv_body = "name,source_type,base_url,external_identifier,adapter_key,company_name,is_active,notes\nExample GH,Greenhouse,https://boards.greenhouse.io/example-title,example-title,,Example,true,Title case source type\nExample Lever,Lever,https://jobs.lever.co/example-lever,example-lever,,Example,true,Title case source type\n"
+
+    response = client.post(
+        "/sources/import",
+        files={"file": ("sources.csv", csv_body, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created"] == 2
+    assert data["invalid"] == 0
+    assert data["skipped_duplicate"] == 0
+    assert {row["status"] for row in data["rows"]} == {"created"}
+
+    stored_types = set(session.scalars(select(Source.source_type)))
+    assert stored_types == {"greenhouse", "lever"}
+
+
+def test_csv_import_preserves_duplicate_skip_with_normalized_source_type(client):
+    csv_body = "name,source_type,base_url,external_identifier,adapter_key,company_name,is_active,notes\nExample GH,Greenhouse,https://boards.greenhouse.io/duplicate-title,duplicate-title,,Example,true,Original\nExample GH Duplicate,greenhouse,https://boards.greenhouse.io/duplicate-title,duplicate-title,,Example,true,Duplicate\n"
+
+    response = client.post(
+        "/sources/import",
+        files={"file": ("sources.csv", csv_body, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created"] == 1
+    assert data["invalid"] == 0
+    assert data["skipped_duplicate"] == 1
+    assert data["rows"][1]["status"] == "skipped_duplicate"
+    assert "Duplicate source already exists." in data["rows"][1]["message"]
+
+
+def test_csv_import_malformed_row_returns_row_level_error(client):
+    csv_body = "name,source_type,base_url,external_identifier,adapter_key,company_name,is_active,notes\nMalformed Notes,Greenhouse,https://boards.greenhouse.io/malformed,malformed,,Example,true,first note,second note\n"
+
+    response = client.post(
+        "/sources/import",
+        files={"file": ("sources.csv", csv_body, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created"] == 0
+    assert data["invalid"] == 1
+    assert data["skipped_duplicate"] == 0
+    assert data["rows"] == [
+        {
+            "row_number": 2,
+            "status": "invalid",
+            "message": "Malformed CSV row: unexpected extra fields found. Quote values that contain commas.",
+            "source_id": None,
+        }
+    ]
+
+
+def test_csv_import_valid_user_csv_shape_imports_successfully(client):
+    csv_body = (
+        "name,source_type,base_url,external_identifier,adapter_key,company_name,is_active,notes\n"
+        'Acme Greenhouse,Greenhouse,https://boards.greenhouse.io/acme,acme,,Acme,true,"backend, platform roles"\n'
+        "Beta Lever,Lever,https://jobs.lever.co/beta,beta,,Beta,true,standard lever board\n"
+    )
+
+    response = client.post(
+        "/sources/import",
+        files={"file": ("job_board.csv", csv_body, "text/csv")},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["created"] == 2
+    assert data["invalid"] == 0
+    assert data["skipped_duplicate"] == 0
+    assert [row["status"] for row in data["rows"]] == ["created", "created"]
 
 
 def test_jobs_api_treats_empty_source_filter_as_unset_and_keeps_integer_filtering(client, monkeypatch):
