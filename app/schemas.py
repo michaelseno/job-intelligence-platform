@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SourceCreateRequest(BaseModel):
@@ -98,6 +99,81 @@ class SourceRunResponse(BaseModel):
     finished_at: datetime | None
 
     model_config = {"from_attributes": True}
+
+
+class SourceBatchRunPreviewRequest(BaseModel):
+    mode: Literal["all", "selected"]
+    source_ids: list[int] | None = None
+
+    @model_validator(mode="after")
+    def validate_selected_source_ids(self):
+        if self.mode == "selected" and not self.source_ids:
+            raise ValueError("source_ids is required for selected batch runs.")
+        return self
+
+
+class SourceBatchRunStartRequest(BaseModel):
+    preview_id: str
+    job_preferences: dict
+
+
+class SourceBatchSourceRef(BaseModel):
+    source_id: int
+    source_name: str
+    health_state: str
+
+
+class SourceBatchSkippedSource(BaseModel):
+    source_id: int
+    source_name: str
+    health_state: str | None = None
+    reason: str
+
+
+class SourceBatchSourceResult(BaseModel):
+    source_id: int
+    source_name: str
+    status: str
+    attempts_used: int
+    source_run_ids: list[int]
+    last_error: str | None = None
+
+
+class SourceBatchRunPreviewResponse(BaseModel):
+    preview_id: str
+    mode: Literal["all", "selected"]
+    eligible_count: int
+    skipped_count: int
+    eligible_sources: list[SourceBatchSourceRef]
+    skipped_sources: list[SourceBatchSkippedSource]
+    expires_at: datetime
+
+
+class SourceBatchRunStartResponse(BaseModel):
+    batch_id: str
+    status: str
+    mode: Literal["all", "selected"]
+    eligible_count: int
+    skipped_count: int
+    poll_url: str
+
+
+class SourceBatchRunStatusResponse(BaseModel):
+    batch_id: str
+    mode: Literal["all", "selected"]
+    status: str
+    eligible_count: int
+    skipped_count: int
+    success_count: int
+    failure_count: int
+    pending_count: int
+    running_count: int
+    completed_count: int
+    started_at: datetime | None
+    finished_at: datetime | None
+    source_results: list[SourceBatchSourceResult]
+    skipped_sources: list[SourceBatchSkippedSource]
+    error_message: str | None = None
 
 
 class DecisionRuleResponse(BaseModel):
