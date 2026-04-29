@@ -26,6 +26,14 @@ from app.domain.job_visibility import apply_main_display_jobs, apply_visible_job
 from app.domain.notifications import NotificationService
 from app.domain.operations import OperationsService
 from app.domain.source_cleanup import run_source_delete_cleanup
+from app.domain.source_batch_runs import (
+    BatchConflictError,
+    BatchPreviewExpiredError,
+    BatchPreviewNotFoundError,
+    SourceBatchExecutor,
+    SourceBatchRunService,
+    build_session_factory_from_session,
+)
 from app.domain.sources import SourceService
 from app.domain.tracking import TrackingService, VALID_TRACKING_STATUSES
 from app.persistence.db import get_db_session
@@ -37,6 +45,11 @@ from app.schemas import (
     JobResponse,
     ReminderResponse,
     SourceCreateRequest,
+    SourceBatchRunPreviewRequest,
+    SourceBatchRunPreviewResponse,
+    SourceBatchRunStartRequest,
+    SourceBatchRunStartResponse,
+    SourceBatchRunStatusResponse,
     SourceDeleteImpactResponse,
     SourceDeleteResponse,
     SourceImportResponse,
@@ -600,6 +613,53 @@ async def import_sources(
             build_source_page_context(request, session, registry, import_result=result, active_tab="csv"),
         )
     return result
+
+
+@router.post("/sources/batch-runs/preview", response_model=SourceBatchRunPreviewResponse)
+async def preview_source_batch_run(
+    payload: SourceBatchRunPreviewRequest,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    return SourceBatchRunService(session, registry).create_preview(payload.mode, payload.source_ids)
+
+
+@router.post("/sources/batch-runs", response_model=SourceBatchRunStartResponse)
+async def start_source_batch_run(
+    payload: SourceBatchRunStartRequest,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    try:
+        preferences = validate_job_filter_preferences(payload.job_preferences)
+    except JobFilterPreferencesError as exc:
+        return preferences_error_response(exc)
+    service = SourceBatchRunService(session, registry)
+    try:
+        response, status_code = service.start_batch(payload.preview_id, preferences)
+    except BatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except BatchPreviewExpiredError as exc:
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=str(exc)) from exc
+    except BatchPreviewNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    if status_code == status.HTTP_202_ACCEPTED:
+        executor = SourceBatchExecutor(registry, session_factory=build_session_factory_from_session(session))
+        background_tasks.add_task(executor.execute, response.batch_id, preferences)
+    return JSONResponse(status_code=status_code, content=response.model_dump(mode="json"))
+
+
+@router.get("/sources/batch-runs/{batch_id}", response_model=SourceBatchRunStatusResponse)
+def get_source_batch_run_status(
+    batch_id: str,
+    session: Session = Depends(get_session_dependency),
+    registry: SourceAdapterRegistry = Depends(get_registry),
+):
+    batch_status = SourceBatchRunService(session, registry).get_status(batch_id)
+    if batch_status is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Batch run not found.")
+    return batch_status
 
 
 @router.get("/sources/{source_id}")

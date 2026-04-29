@@ -16,15 +16,39 @@
 </section>
 
 <section class="content-grid content-grid--sources">
-  <article class="surface">
+  <article class="surface" data-source-batch-root>
     <div class="section-heading"><h3>Source inventory</h3><a href="/source-health">Source Health</a></div>
+    <div class="source-batch-toolbar" data-testid="source-batch-toolbar" aria-label="Source batch run controls">
+      <div class="source-batch-toolbar__actions">
+        <button class="btn btn--primary" type="button" data-batch-run-all data-testid="run-all-button">Run All</button>
+        <button class="btn btn--secondary" type="button" data-batch-run-selected data-testid="run-selected-button" disabled title="Select at least one Healthy source to run selected sources.">Run Selected</button>
+        <span class="source-batch-selection-status muted" data-batch-selection-status aria-live="polite">0 selected</span>
+      </div>
+      <p class="helper-text source-batch-toolbar__help">Run All uses all Healthy sources in the system and ignores filters, search, sorting, and pagination.</p>
+    </div>
+    <div class="source-batch-region hidden" data-batch-region aria-live="polite"></div>
+    <div class="source-batch-dialog-backdrop hidden" data-batch-dialog-backdrop></div>
+    <section class="source-batch-dialog hidden" data-batch-dialog role="dialog" aria-modal="true" aria-labelledby="source-batch-dialog-title" aria-describedby="source-batch-dialog-description" data-testid="batch-confirmation-dialog">
+      <h3 id="source-batch-dialog-title" tabindex="-1">Run selected healthy sources?</h3>
+      <div id="source-batch-dialog-description" data-batch-dialog-description></div>
+      <div class="source-batch-dialog__error alert alert--danger hidden" data-batch-dialog-error role="alert"></div>
+      <div class="form-footer form-footer--split source-batch-dialog__actions">
+        <button class="btn btn--secondary" type="button" data-batch-dialog-cancel>Cancel</button>
+        <button class="btn btn--primary" type="button" data-batch-dialog-confirm>Run eligible sources</button>
+      </div>
+    </section>
     {% if sources %}
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Name</th><th>Adapter</th><th>Health</th><th>Last run</th><th>Actions</th></tr></thead>
+          <thead><tr><th class="source-select-cell"><label class="sr-only" for="source-select-all-visible">Select all visible sources</label><input id="source-select-all-visible" type="checkbox" data-source-select-all aria-label="Select all visible sources"></th><th>Name</th><th>Adapter</th><th>Health</th><th>Last run</th><th>Actions</th></tr></thead>
           <tbody>
             {% for source in sources %}
-              <tr>
+              {% set source_health = (source.health_state or 'unknown')|lower %}
+              <tr data-source-row data-source-id="{{ source.id }}" data-source-name="{{ source.name|e }}" data-health-state="{{ source_health }}">
+                <td class="source-select-cell">
+                  <label class="sr-only" for="source-select-{{ source.id }}">Select {{ source.name }}</label>
+                  <input id="source-select-{{ source.id }}" type="checkbox" data-source-row-checkbox data-testid="source-row-checkbox" aria-label="Select {{ source.name }}">
+                </td>
                 <td>
                   <a class="table-link" href="/sources/{{ source.id }}">{{ source.name }}</a>
                   <div class="muted">{{ source.base_url }}</div>
@@ -34,14 +58,14 @@
                 <td>{{ ui.badge((source.health_state or 'unknown')|title, ui.tone_from_status(source.health_state)) }}</td>
                 <td>{{ format_dt(source.last_run_at) if source.last_run_at else 'Never run' }}</td>
                 <td>
-                  <div class="row-actions row-actions--wrap">
-                    <a class="btn btn--ghost btn--sm" href="/sources/{{ source.id }}">Open</a>
-                    <a class="btn btn--ghost btn--sm" href="/sources/{{ source.id }}/edit">Edit source</a>
-                    <a class="btn btn--ghost btn--sm btn--danger" href="/sources/{{ source.id }}/delete">Delete source</a>
+                  <div class="row-actions row-actions--icons" aria-label="Actions for {{ source.name }}">
+                    <a class="btn btn--ghost btn--icon" href="/sources/{{ source.id }}" aria-label="Open {{ source.name }} source" title="Open" data-testid="source-row-action-open"><span aria-hidden="true">↗</span><span class="sr-only">Open</span></a>
+                    <a class="btn btn--ghost btn--icon" href="/sources/{{ source.id }}/edit" aria-label="Edit {{ source.name }} source" title="Edit source" data-testid="source-row-action-edit"><span aria-hidden="true">✎</span><span class="sr-only">Edit source</span></a>
                     <form method="post" action="/sources/{{ source.id }}/run" data-requires-job-preferences-submit="true">
                       <input type="hidden" name="next" value="/sources">
-                      <button class="btn btn--secondary btn--sm" type="submit">Run now</button>
+                      <button class="btn btn--secondary btn--icon" type="submit" aria-label="Run {{ source.name }} now" title="Run now" data-testid="source-row-action-run"><span aria-hidden="true">▶</span><span class="sr-only">Run now</span></button>
                     </form>
+                    <a class="btn btn--ghost btn--icon btn--danger" href="/sources/{{ source.id }}/delete" aria-label="Delete {{ source.name }} source" title="Delete source" data-testid="source-row-action-delete"><span aria-hidden="true">🗑</span><span class="sr-only">Delete source</span></a>
                   </div>
                 </td>
               </tr>

@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('form[data-clean-empty-query="true"]').forEach((form) => form.addEventListener('submit', () => form.querySelectorAll('input[name], select[name], textarea[name]').forEach((field) => { if (!field.value) field.disabled = true; })));
   initPreferenceGuards();
   initJobPreferencesPage();
+  initSourceBatchRuns();
 });
 
 const CATEGORY_OPTIONS = [
@@ -105,5 +106,184 @@ function initJobPreferencesPage() {
 }
 
 document.addEventListener('submit', (event) => { const form = event.target; if (!(form instanceof HTMLFormElement) || form.dataset.requiresJobPreferencesSubmit !== 'true') return; const preferences = JobPreferencesStore.read(); if (!preferences) { event.preventDefault(); JobPreferencesStore.redirectToSetup(); return; } let input = form.querySelector('input[name="job_preferences_json"]'); if (!input) { input = document.createElement('input'); input.type = 'hidden'; input.name = 'job_preferences_json'; form.appendChild(input); } input.value = JSON.stringify(preferences); });
+
+function initSourceBatchRuns() {
+  const root = document.querySelector('[data-source-batch-root]'); if (!root) return;
+  const runAllButton = root.querySelector('[data-batch-run-all]');
+  const runSelectedButton = root.querySelector('[data-batch-run-selected]');
+  const selectionStatus = root.querySelector('[data-batch-selection-status]');
+  const region = root.querySelector('[data-batch-region]');
+  const selectAll = root.querySelector('[data-source-select-all]');
+  const rows = Array.from(root.querySelectorAll('[data-source-row]'));
+  const checkboxes = Array.from(root.querySelectorAll('[data-source-row-checkbox]'));
+  const dialog = root.querySelector('[data-batch-dialog]');
+  const dialogBackdrop = root.querySelector('[data-batch-dialog-backdrop]');
+  const dialogTitle = root.querySelector('#source-batch-dialog-title');
+  const dialogDescription = root.querySelector('[data-batch-dialog-description]');
+  const dialogError = root.querySelector('[data-batch-dialog-error]');
+  const dialogCancel = root.querySelector('[data-batch-dialog-cancel]');
+  const dialogConfirm = root.querySelector('[data-batch-dialog-confirm]');
+  const focusableSelector = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let selectedIds = new Set();
+  let active = false;
+  let previewLoading = false;
+  let pendingPreview = null;
+  let initiatingButton = null;
+  let pollTimer = null;
+  let lastStatus = null;
+
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+  const terminal = (status) => ['completed', 'completed_with_failures', 'failed'].includes(status);
+  const modeLabel = (mode) => (mode === 'all' ? 'Run All' : 'Run Selected');
+  const resultLabel = (status) => ({ success: 'Succeeded', failed: 'Failed after retries', skipped: 'Skipped', running: 'Running', pending: 'Queued', queued: 'Queued' }[status] || String(status || 'Unknown').replace(/_/g, ' '));
+  const resultTone = (status) => (status === 'success' ? 'success' : status === 'failed' ? 'danger' : status === 'running' ? 'info' : status === 'skipped' ? 'warning' : 'neutral');
+
+  function getSelectedRows() { return rows.filter((row) => selectedIds.has(Number(row.dataset.sourceId))); }
+  function hasHealthySelection() { return getSelectedRows().some((row) => (row.dataset.healthState || '').toLowerCase() === 'healthy'); }
+  function setButtonLoading(button, loading) { if (!button) return; button.textContent = loading ? 'Preparing…' : (button === runAllButton ? 'Run All' : 'Run Selected'); button.setAttribute('aria-busy', loading ? 'true' : 'false'); }
+  function syncToolbar() {
+    const count = selectedIds.size;
+    if (selectionStatus) selectionStatus.textContent = `${count} selected`;
+    if (runAllButton) runAllButton.disabled = active || previewLoading;
+    if (runSelectedButton) {
+      const enabled = !active && !previewLoading && hasHealthySelection();
+      runSelectedButton.disabled = !enabled;
+      runSelectedButton.title = enabled ? 'Run selected Healthy sources.' : 'Select at least one Healthy source to run selected sources.';
+    }
+    if (selectAll) {
+      const visibleIds = rows.map((row) => Number(row.dataset.sourceId));
+      const selectedVisible = visibleIds.filter((id) => selectedIds.has(id)).length;
+      selectAll.checked = Boolean(visibleIds.length && selectedVisible === visibleIds.length);
+      selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleIds.length;
+      selectAll.disabled = visibleIds.length === 0;
+    }
+    rows.forEach((row) => row.classList.toggle('is-selected', selectedIds.has(Number(row.dataset.sourceId))));
+  }
+  function setRegion(html, options = {}) { if (!region) return; region.innerHTML = html; region.classList.toggle('hidden', !html); region.setAttribute('role', options.alert ? 'alert' : 'status'); if (options.testid) region.dataset.testid = options.testid; }
+  function showError(message) { setRegion(`<div class="alert alert--danger" role="alert"><strong>${escapeHtml(message)}</strong></div>`, { alert: true }); }
+  function closeDialog() {
+    if (!dialog || !dialogBackdrop) return;
+    dialog.classList.add('hidden'); dialogBackdrop.classList.add('hidden');
+    dialogError?.classList.add('hidden');
+    pendingPreview = null;
+    if (initiatingButton instanceof HTMLElement) initiatingButton.focus();
+    initiatingButton = null;
+    syncToolbar();
+  }
+  function trapDialogFocus(event) {
+    if (!dialog || dialog.classList.contains('hidden') || event.key !== 'Tab') return;
+    const focusable = Array.from(dialog.querySelectorAll(focusableSelector));
+    if (!focusable.length) return;
+    const first = focusable[0]; const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+  function openDialog(preview, mode, selectedCount) {
+    pendingPreview = preview;
+    const isAll = mode === 'all';
+    if (dialogTitle) dialogTitle.textContent = isAll ? 'Run all healthy sources?' : 'Run selected healthy sources?';
+    const skippedItems = (preview.skipped_sources || []).map((item) => `<li><strong>${escapeHtml(item.source_name || `Source ${item.source_id}`)}</strong>: ${escapeHtml(item.reason || item.health_state || 'Skipped')}</li>`).join('');
+    const zero = Number(preview.eligible_count || 0) === 0;
+    if (dialogDescription) dialogDescription.innerHTML = `
+      <p>${isAll ? 'This will run all Healthy sources in the system. Current filters, search, sorting, and pagination will not limit this run.' : 'Only selected sources that are Healthy will run. Selected sources that are not eligible will be skipped.'}</p>
+      ${isAll ? '' : `<p><strong>Selected:</strong> ${Number(selectedCount || 0)}</p>`}
+      <p><strong>Eligible to run:</strong> ${Number(preview.eligible_count || 0)}</p>
+      <p><strong>Skipped:</strong> ${Number(preview.skipped_count || 0)}</p>
+      ${zero ? '<p><strong>No sources are eligible to run.</strong></p>' : ''}
+      ${(preview.skipped_sources || []).length ? `<details><summary>View skipped sources</summary><ul>${skippedItems}</ul></details>` : ''}`;
+    if (dialogConfirm) dialogConfirm.classList.toggle('hidden', zero);
+    if (dialogCancel) dialogCancel.textContent = zero ? 'Close' : 'Cancel';
+    dialogError?.classList.add('hidden');
+    dialog?.classList.remove('hidden'); dialogBackdrop?.classList.remove('hidden');
+    setTimeout(() => (dialogTitle instanceof HTMLElement ? dialogTitle.focus() : dialog?.querySelector(focusableSelector)?.focus()), 0);
+  }
+  async function requestJson(url, options = {}) {
+    const response = await fetch(url, { headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(options.headers || {}) }, ...options });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.detail || payload.message || `Request failed with status ${response.status}`);
+      error.status = response.status; throw error;
+    }
+    return payload;
+  }
+  async function preview(mode) {
+    const preferences = JobPreferencesStore.read(); if (!preferences) { JobPreferencesStore.redirectToSetup(); return; }
+    initiatingButton = mode === 'all' ? runAllButton : runSelectedButton;
+    previewLoading = true; setButtonLoading(initiatingButton, true); syncToolbar();
+    try {
+      const sourceIds = mode === 'selected' ? Array.from(selectedIds) : null;
+      const payload = await requestJson('/sources/batch-runs/preview', { method: 'POST', body: JSON.stringify({ mode, source_ids: sourceIds }) });
+      openDialog(payload, mode, sourceIds ? sourceIds.length : 0);
+    } catch (_error) { showError('Could not prepare batch run. Try again.'); }
+    finally { previewLoading = false; setButtonLoading(initiatingButton, false); syncToolbar(); }
+  }
+  function renderProgress(status, statusError = '') {
+    lastStatus = status;
+    const eligible = Number(status.eligible_count || 0); const completed = Number(status.completed_count || 0);
+    const progress = eligible > 0 ? `<progress class="source-batch-progress" max="${eligible}" value="${Math.min(completed, eligible)}">${completed} of ${eligible}</progress>` : '';
+    const rowsHtml = (status.source_results || []).map((item) => `<tr><td>${escapeHtml(item.source_name || `Source ${item.source_id}`)}</td><td><span class="badge badge--${resultTone(item.status)}">${escapeHtml(resultLabel(item.status))}</span></td><td>${Number(item.attempts_used || 0)} of 3</td><td>${escapeHtml(item.last_error || '')}</td></tr>`).join('');
+    const skippedHtml = (status.skipped_sources || []).map((item) => `<tr><td>${escapeHtml(item.source_name || `Source ${item.source_id}`)}</td><td><span class="badge badge--warning">Skipped</span></td><td>—</td><td>${escapeHtml(item.reason || item.health_state || '')}</td></tr>`).join('');
+    setRegion(`<section class="source-batch-panel" data-testid="batch-progress-panel" aria-labelledby="source-batch-progress-title">
+      <h3 id="source-batch-progress-title" tabindex="-1">${status.status === 'starting' ? 'Starting batch run…' : 'Batch run in progress'}</h3>
+      <p>${escapeHtml(modeLabel(status.mode))}: ${completed} of ${eligible} completed, ${Number(status.running_count || 0)} running, ${Number(status.pending_count || 0)} queued, ${Number(status.success_count || 0)} succeeded, ${Number(status.failure_count || 0)} failed, ${Number(status.skipped_count || 0)} skipped.</p>
+      ${progress}<p class="helper-text">Up to 5 sources run at the same time. Failed sources may retry up to 3 attempts.</p>
+      ${statusError ? `<div class="alert alert--warning" role="status">${escapeHtml(statusError)}</div>` : ''}
+      ${(rowsHtml || skippedHtml) ? `<div class="table-wrap source-batch-details"><table><thead><tr><th>Source</th><th>Result</th><th>Attempts used</th><th>Reason or error</th></tr></thead><tbody>${rowsHtml}${skippedHtml}</tbody></table></div>` : ''}
+    </section>`);
+  }
+  function renderSummary(status) {
+    active = false; syncToolbar();
+    const title = status.status === 'failed' ? 'Batch run failed' : Number(status.failure_count || 0) > 0 || status.status === 'completed_with_failures' ? 'Batch run completed with failures' : 'Batch run completed';
+    const rowsHtml = (status.source_results || []).map((item) => `<tr><td>${escapeHtml(item.source_name || `Source ${item.source_id}`)}</td><td><span class="badge badge--${resultTone(item.status)}">${escapeHtml(resultLabel(item.status))}</span></td><td>${Number(item.attempts_used || 0)} of 3</td><td>${escapeHtml(item.last_error || '')}</td></tr>`).join('');
+    const skippedHtml = (status.skipped_sources || []).map((item) => `<tr><td>${escapeHtml(item.source_name || `Source ${item.source_id}`)}</td><td><span class="badge badge--warning">Skipped</span></td><td>—</td><td>${escapeHtml(item.reason || item.health_state || '')}</td></tr>`).join('');
+    setRegion(`<section class="source-batch-panel source-batch-summary" data-testid="batch-completion-summary" aria-labelledby="source-batch-summary-title">
+      <div class="section-heading"><h3 id="source-batch-summary-title" tabindex="-1">${escapeHtml(title)}</h3><button class="btn btn--ghost btn--sm" type="button" data-batch-dismiss-summary>Dismiss summary</button></div>
+      ${status.error_message ? `<div class="alert alert--danger" role="alert">${escapeHtml(status.error_message)}</div>` : ''}
+      <div class="source-batch-counts" aria-label="Batch run summary counts"><span>Succeeded: <strong>${Number(status.success_count || 0)}</strong></span><span>Failed: <strong>${Number(status.failure_count || 0)}</strong></span><span>Skipped: <strong>${Number(status.skipped_count || 0)}</strong></span><span>Eligible: <strong>${Number(status.eligible_count || 0)}</strong></span></div>
+      <div class="table-wrap source-batch-details"><table><thead><tr><th>Source</th><th>Result</th><th>Attempts used</th><th>Reason or error</th></tr></thead><tbody>${rowsHtml}${skippedHtml || '<tr><td colspan="4">No skipped sources.</td></tr>'}</tbody></table></div>
+    </section>`);
+  }
+  function poll(url) {
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(async () => {
+      try {
+        const status = await requestJson(url);
+        if (terminal(status.status)) { renderSummary(status); return; }
+        renderProgress(status); poll(url);
+      } catch (error) {
+        if (error.status === 404) { active = false; syncToolbar(); showError('Batch status is no longer available. Completed source attempts may still appear in source run history.'); return; }
+        if (lastStatus) renderProgress(lastStatus, 'Unable to refresh batch status. Retrying…');
+        poll(url);
+      }
+    }, 1000);
+  }
+  async function startBatch() {
+    if (!pendingPreview || !dialogConfirm) return;
+    const preferences = JobPreferencesStore.read(); if (!preferences) { JobPreferencesStore.redirectToSetup(); return; }
+    dialogConfirm.disabled = true; dialogConfirm.textContent = 'Starting…';
+    try {
+      const skippedSources = pendingPreview.skipped_sources || [];
+      const started = await requestJson('/sources/batch-runs', { method: 'POST', body: JSON.stringify({ preview_id: pendingPreview.preview_id, job_preferences: preferences }) });
+      active = ['starting', 'running'].includes(started.status); closeDialog(); syncToolbar();
+      const initial = { ...started, success_count: 0, failure_count: 0, pending_count: started.eligible_count || 0, running_count: 0, completed_count: 0, source_results: [], skipped_sources: skippedSources };
+      if (terminal(started.status)) { renderSummary(initial); return; }
+      renderProgress(initial); document.getElementById('source-batch-progress-title')?.focus(); poll(started.poll_url || `/sources/batch-runs/${started.batch_id}`);
+    } catch (error) {
+      const message = error.status === 409 ? 'Another batch run is already active. Wait for it to finish before starting another.' : error.status === 410 ? 'This confirmation expired. Prepare the batch run again.' : 'Could not start batch run. Try again.';
+      if (dialogError) { dialogError.textContent = message; dialogError.classList.remove('hidden'); }
+    } finally { dialogConfirm.disabled = false; dialogConfirm.textContent = 'Run eligible sources'; syncToolbar(); }
+  }
+
+  checkboxes.forEach((checkbox) => checkbox.addEventListener('change', () => { const row = checkbox.closest('[data-source-row]'); const id = Number(row?.dataset.sourceId); if (!id) return; if (checkbox.checked) selectedIds.add(id); else selectedIds.delete(id); syncToolbar(); }));
+  selectAll?.addEventListener('change', () => { rows.forEach((row) => { const id = Number(row.dataset.sourceId); const checkbox = row.querySelector('[data-source-row-checkbox]'); if (selectAll.checked) selectedIds.add(id); else selectedIds.delete(id); if (checkbox) checkbox.checked = selectAll.checked; }); syncToolbar(); });
+  runAllButton?.addEventListener('click', () => preview('all'));
+  runSelectedButton?.addEventListener('click', () => { if (!runSelectedButton.disabled) preview('selected'); });
+  dialogCancel?.addEventListener('click', closeDialog);
+  dialogBackdrop?.addEventListener('click', closeDialog);
+  dialogConfirm?.addEventListener('click', startBatch);
+  region?.addEventListener('click', (event) => { if (event.target instanceof HTMLElement && event.target.matches('[data-batch-dismiss-summary]')) setRegion(''); });
+  document.addEventListener('keydown', (event) => { if (!dialog || dialog.classList.contains('hidden')) return; if (event.key === 'Escape') closeDialog(); else trapDialogFocus(event); });
+  syncToolbar();
+}
 
 if (typeof window !== 'undefined') window.__JobPreferencesTestHelpers = { CATEGORY_OPTIONS, COUNTRY_OPTIONS, normalizeWizard, mapWizardToPreferences, createPreferenceEnvelope, extractPreferences, editablePreferenceSnapshot, preferencesEqual, normalizeKeywordLines, safeNextPath, JobPreferencesStore };
