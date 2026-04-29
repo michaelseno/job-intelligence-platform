@@ -38,6 +38,83 @@ def test_update_source_supports_partial_patch_without_self_duplicate_failure(ses
     assert updated.dedupe_key == source.dedupe_key
 
 
+def test_duplicate_prevention_uses_company_provider_not_base_url(session):
+    service = SourceService(session, SourceAdapterRegistry())
+    service.create_source(
+        SourceCreateRequest(
+            name="Asana Greenhouse",
+            source_type="greenhouse",
+            base_url="https://boards.greenhouse.io/asana",
+            external_identifier="asana",
+            company_name="Asana",
+        )
+    )
+
+    result = service.validate(
+        SourceCreateRequest(
+            name="Asana GH New Host",
+            source_type="greenhouse",
+            base_url="https://job-boards.greenhouse.io/asana",
+            external_identifier="asana",
+            company_name="Asana",
+        )
+    )
+
+    assert result.valid is False
+    assert "Duplicate source already exists." in result.errors
+
+
+def test_duplicate_prevention_allows_same_company_different_provider(session):
+    service = SourceService(session, SourceAdapterRegistry())
+    service.create_source(
+        SourceCreateRequest(
+            name="Keeper Security Greenhouse",
+            source_type="greenhouse",
+            base_url="https://boards.greenhouse.io/keepersecurity",
+            external_identifier="keepersecurity",
+            company_name="Keeper Security",
+        )
+    )
+
+    result = service.validate(
+        SourceCreateRequest(
+            name="Keeper Security Lever",
+            source_type="lever",
+            base_url="https://jobs.lever.co/keepersecurity",
+            external_identifier="keepersecurity",
+            company_name="Keeper Security",
+        )
+    )
+
+    assert result.valid is True
+
+
+def test_deleted_company_provider_duplicate_does_not_block_new_active_source(session):
+    service = SourceService(session, SourceAdapterRegistry())
+    source = service.create_source(
+        SourceCreateRequest(
+            name="Deleted GH",
+            source_type="greenhouse",
+            base_url="https://boards.greenhouse.io/deleted",
+            external_identifier="deleted",
+            company_name="DeletedCo",
+        )
+    )
+    service.delete_source(source.id)
+
+    result = service.validate(
+        SourceCreateRequest(
+            name="Deleted GH Replacement",
+            source_type="greenhouse",
+            base_url="https://job-boards.greenhouse.io/deleted",
+            external_identifier="deleted",
+            company_name="DeletedCo",
+        )
+    )
+
+    assert result.valid is True
+
+
 def test_delete_impact_counts_runs_linked_jobs_and_tracked_jobs(session):
     service = SourceService(session, SourceAdapterRegistry())
     source = service.create_source(

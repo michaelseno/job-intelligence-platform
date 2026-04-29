@@ -11,12 +11,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.domain.operations import OperationsService
+from app.domain.source_seed import VALIDATED_SOURCE_ADDITIONS
 from app.persistence.models import Source, utcnow
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 ACTIVE_SOURCE_UNIQUE_INDEX = "ix_sources_dedupe_key_active_unique"
+ACTIVE_COMPANY_PROVIDER_UNIQUE_INDEX = "ix_sources_company_provider_active_unique"
 LEGACY_SOURCE_UNIQUE_CONSTRAINT = "uq_sources_dedupe_key"
 
 
@@ -47,6 +49,7 @@ def test_alembic_upgrade_adds_deleted_at_and_enforces_active_source_uniqueness(t
     inspector = inspect(engine)
     columns = {column["name"] for column in inspector.get_columns("sources")}
     assert "deleted_at" in columns
+    assert "company_provider_key" in columns
 
     fk_tables = {
         "source_runs": "source_id",
@@ -64,9 +67,14 @@ def test_alembic_upgrade_adds_deleted_at_and_enforces_active_source_uniqueness(t
         constraint["name"] for constraint in inspector.get_unique_constraints("sources")
     }
     assert any(index["name"] == ACTIVE_SOURCE_UNIQUE_INDEX for index in inspector.get_indexes("sources"))
+    assert any(index["name"] == ACTIVE_COMPANY_PROVIDER_UNIQUE_INDEX for index in inspector.get_indexes("sources"))
 
     with Session(engine) as session:
         service = OperationsService(session)
+        seeded_sources = session.query(Source).filter(Source.deleted_at.is_(None)).all()
+        assert len(seeded_sources) == len(VALIDATED_SOURCE_ADDITIONS)
+        assert all(source.notes is None for source in seeded_sources)
+
         source = Source(
             name="Legacy Source",
             source_type="greenhouse",
@@ -78,7 +86,7 @@ def test_alembic_upgrade_adds_deleted_at_and_enforces_active_source_uniqueness(t
         session.add(source)
         session.commit()
 
-        assert [item.name for item in service.list_source_health()] == ["Legacy Source"]
+        assert "Legacy Source" in [item.name for item in service.list_source_health()]
 
         duplicate_active = Source(
             name="Duplicate Active Source",
@@ -109,6 +117,8 @@ def test_alembic_upgrade_adds_deleted_at_and_enforces_active_source_uniqueness(t
         session.add(replacement)
         session.commit()
 
-        assert [item.name for item in service.list_source_health()] == ["Replacement Source"]
+        source_health_names = [item.name for item in service.list_source_health()]
+        assert "Legacy Source" not in source_health_names
+        assert "Replacement Source" in source_health_names
 
     engine.dispose()

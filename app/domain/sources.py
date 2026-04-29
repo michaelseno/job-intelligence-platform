@@ -4,7 +4,7 @@ import csv
 import io
 from dataclasses import dataclass
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.adapters.base.registry import SourceAdapterRegistry, UnsupportedAdapterError
@@ -69,7 +69,16 @@ class SourceService:
             payload.external_identifier,
             payload.adapter_key,
         )
-        duplicate_query = select(Source).where(Source.dedupe_key == dedupe_key, Source.deleted_at.is_(None))
+        company_provider_key = build_source_company_provider_key(
+            payload.source_type,
+            payload.company_name,
+            payload.name,
+            payload.adapter_key,
+        )
+        duplicate_query = select(Source).where(
+            Source.deleted_at.is_(None),
+            or_(Source.company_provider_key == company_provider_key, Source.dedupe_key == dedupe_key),
+        )
         if exclude_source_id is not None:
             duplicate_query = duplicate_query.where(Source.id != exclude_source_id)
         duplicate = self.session.scalar(duplicate_query)
@@ -97,6 +106,12 @@ class SourceService:
             config_json=payload.config_json or {},
             notes=clean_text(payload.notes) or None,
             dedupe_key=validation.dedupe_key or "",
+            company_provider_key=build_source_company_provider_key(
+                payload.source_type,
+                payload.company_name,
+                payload.name,
+                payload.adapter_key,
+            ),
             is_active=payload.is_active,
         )
         self.session.add(source)
@@ -134,6 +149,12 @@ class SourceService:
         source.external_identifier = clean_text(payload.external_identifier) or None
         source.notes = clean_text(payload.notes) or None
         source.dedupe_key = validation.dedupe_key or ""
+        source.company_provider_key = build_source_company_provider_key(
+            payload.source_type,
+            payload.company_name,
+            payload.name,
+            payload.adapter_key,
+        )
         source.is_active = payload.is_active
         source.config_json = payload.config_json or source.config_json or {}
         self.session.add(source)
@@ -226,6 +247,19 @@ def build_source_dedupe_key(source_type: str, base_url: str, external_identifier
     return "|".join(
         [slugify(source_type), slugify(adapter_key), normalize_url(base_url), slugify(external_identifier)]
     )
+
+
+def build_source_company_provider_key(
+    source_type: str,
+    company_name: str | None,
+    source_name: str | None,
+    adapter_key: str | None,
+) -> str:
+    company_key = slugify(company_name) or slugify(source_name)
+    provider_key = slugify(source_type)
+    if provider_key in {"common-pattern", "custom-adapter"}:
+        provider_key = "|".join([provider_key, slugify(adapter_key)])
+    return "|".join([company_key, provider_key])
 
 
 def validate_csv_row_shape(row: dict[str | None, str | list[str] | None]) -> list[str]:
