@@ -25,9 +25,10 @@ class LeverAdapter:
         payload = response.json()
         jobs: list[NormalizedJobCandidate] = []
         for item in payload:
+            lists_text = _extract_lists_text(item.get("lists"))
             description_parts = [
                 item.get("descriptionPlain"),
-                item.get("lists") and " ".join(entry.get("text", "") for group in item.get("lists", []) for entry in group.get("content", [])),
+                lists_text,
                 item.get("additionalPlain"),
             ]
             description_text = clean_text(" ".join(part for part in description_parts if part))
@@ -48,6 +49,28 @@ class LeverAdapter:
                 )
             )
         return AdapterFetchResult(jobs=jobs)
+
+
+def _extract_lists_text(lists_payload: object) -> str:
+    if not isinstance(lists_payload, list):
+        return ""
+
+    parts: list[str] = []
+    for group in lists_payload:
+        if not isinstance(group, dict):
+            continue
+        content = group.get("content", [])
+        if isinstance(content, str):
+            parts.append(content)
+            continue
+        if not isinstance(content, list):
+            continue
+        for entry in content:
+            if isinstance(entry, dict):
+                parts.append(clean_text(entry.get("text")))
+            elif isinstance(entry, str):
+                parts.append(entry)
+    return clean_text(" ".join(part for part in parts if part))
 
 
 def _parse_millis(value: int | None) -> datetime | None:

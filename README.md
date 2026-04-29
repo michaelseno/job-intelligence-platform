@@ -16,6 +16,16 @@ Local-first FastAPI backend for the Job Intelligence Platform MVP.
 5. Start the app:
    - `uvicorn app.main:app --reload`
 
+### Database schema guardrail
+
+The app validates migrated PostgreSQL databases during startup. If the database
+revision is behind the repository head, startup fails with a clear message to run
+`alembic upgrade head` instead of allowing route-level ORM errors. Source health
+cleanup requires migration `20260429_0003`; after pulling this change, run
+`alembic upgrade head` against the same `DATABASE_URL` used by the server before
+restarting the app. The validated source additions are also applied by Alembic
+migration `20260429_0004`, so `alembic upgrade head` is required to seed them.
+
 ## MVP backend scope implemented
 
 - manual source creation and CSV import

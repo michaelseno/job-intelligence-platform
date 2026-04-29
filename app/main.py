@@ -9,6 +9,7 @@ from starlette.staticfiles import StaticFiles
 
 from app.config.logging import configure_logging
 from app.config.settings import get_settings
+from app.persistence.schema_guard import should_validate_schema_on_startup, validate_database_schema_current
 from app.web.routes import router
 
 
@@ -19,6 +20,8 @@ scheduler = BackgroundScheduler(timezone="UTC")
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     configure_logging()
+    if should_validate_schema_on_startup(settings.database_url):
+        validate_database_schema_current(settings.database_url)
     if settings.scheduler_enabled and not scheduler.running:
         scheduler.start()
     try:
