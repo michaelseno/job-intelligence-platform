@@ -31,3 +31,6 @@ Implemented the Location step as a searchable region accordion with country chec
 - `pytest tests/ui/test_configurable_job_preferences_ui.py tests/ui/test_job_preference_location_groups_static.py` — not runnable: `pytest` command unavailable.
 - `python3 -m pytest tests/ui/test_configurable_job_preferences_ui.py tests/ui/test_job_preference_location_groups_static.py` — not runnable: Python environment has no `pytest` module installed.
 - Static country ID sanity script — passed for required legacy/North America IDs and no duplicate IDs detected by the local check.
+
+## Commit
+- `82abd0f` — `feat: group job preference locations`

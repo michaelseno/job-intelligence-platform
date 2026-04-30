@@ -36,4 +36,4 @@ Implemented a frontend-only grouped Location selector for Job Preferences using 
 - ISO data integrity is covered by implementation review and static assertions, not a canonical committed ISO fixture.
 
 ## 7. Commit Status
-Pending commit.
+Committed in `82abd0f` (`feat: group job preference locations`).
