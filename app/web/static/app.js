@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && sidebar.classList.contains('is-open')) closeSidebar(); });
   }
   document.querySelectorAll('form[data-clean-empty-query="true"]').forEach((form) => form.addEventListener('submit', () => form.querySelectorAll('input[name], select[name], textarea[name]').forEach((field) => { if (!field.value) field.disabled = true; })));
+  initTransientTrackingForms();
   initPreferenceGuards();
   initJobPreferencesPage();
 });
@@ -102,6 +103,32 @@ function initJobPreferencesPage() {
   function renderMode() { const setup = isSetup(); elements.title.textContent = setup ? 'Set up Job Preferences' : 'Job Preferences'; elements.desc.textContent = setup ? 'Answer a few questions so the app can filter and rank jobs for your search.' : 'Configure the criteria used to filter, score, and rank jobs.'; elements.progress.classList.toggle('hidden', !setup); elements.advanced.classList.toggle('hidden', setup); elements.reset.classList.toggle('hidden', setup); document.querySelectorAll('[data-wizard-step]').forEach((panel) => panel.classList.toggle('hidden', setup ? Number(panel.dataset.wizardStep) !== currentStep : false)); setStep(setup ? currentStep : 0); setStatus(activePreferences ? 'active' : 'setup'); if (activePreferences && activePreferences.configured_at) elements.lastSaved.textContent = `Last saved ${new Date(activePreferences.configured_at).toLocaleString()}`; }
   renderOptions(); populateAdvanced(activePreferences || mapWizardToPreferences(wizard, defaults)); renderMode(); if (!JobPreferencesStore.isStorageAvailable()) { elements.storage.classList.remove('hidden'); elements.save.disabled = true; }
   document.getElementById('category-search').addEventListener('input', () => { renderOptions(); }); form.addEventListener('change', (event) => { if (event.target.name === 'work_arrangements') { let work = selected('work_arrangements'); if (event.target.value === 'any' && event.target.checked) work = ['any']; else work = work.filter((v) => v !== 'any'); wizard.work_arrangements = work; } collectWizardFromInputs(); syncInputs(); updateDirty(); }); form.addEventListener('input', () => { collectWizardFromInputs(); updateDirty(); }); elements.next.addEventListener('click', () => { if (validateStep(currentStep)) setStep(Math.min(3, currentStep + 1)); }); elements.back.addEventListener('click', () => setStep(Math.max(0, currentStep - 1))); elements.reset.addEventListener('click', () => { envelope = JobPreferencesStore.readEnvelope(); if (!envelope) return; wizard = normalizeWizard(envelope.wizard); activePreferences = envelope.preferences; baselineWizard = JSON.stringify(wizard); baselinePreferences = editablePreferenceSnapshot(activePreferences); renderOptions(); populateAdvanced(activePreferences); updateDirty(); }); form.addEventListener('submit', (event) => { event.preventDefault(); save(); }); updateDirty();
+}
+
+function initTransientTrackingForms() {
+  document.querySelectorAll('form[data-transient-tracking-form]').forEach((form) => {
+    const select = form.querySelector('select[name="tracking_status"]');
+    const button = form.querySelector('button[type="submit"]');
+    const syncButton = () => { if (button && select) button.disabled = !select.value; };
+    syncButton();
+    select?.addEventListener('change', syncButton);
+    form.addEventListener('submit', () => {
+      if (select && select.value) {
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'tracking_status';
+        hidden.value = select.value;
+        form.appendChild(hidden);
+        select.disabled = true;
+      }
+      if (button) {
+        button.disabled = true;
+        button.textContent = 'Saving…';
+      }
+      form.setAttribute('aria-busy', 'true');
+      form.closest('tr, article')?.setAttribute('aria-busy', 'true');
+    });
+  });
 }
 
 document.addEventListener('submit', (event) => { const form = event.target; if (!(form instanceof HTMLFormElement) || form.dataset.requiresJobPreferencesSubmit !== 'true') return; const preferences = JobPreferencesStore.read(); if (!preferences) { event.preventDefault(); JobPreferencesStore.redirectToSetup(); return; } let input = form.querySelector('input[name="job_preferences_json"]'); if (!input) { input = document.createElement('input'); input.type = 'hidden'; input.name = 'job_preferences_json'; form.appendChild(input); } input.value = JSON.stringify(preferences); });

@@ -97,11 +97,20 @@ tbody tr:hover { background: #fafbfc; }
 .badge--danger { color: var(--danger-600); background: var(--danger-50); }
 .badge--info { color: var(--info-600); background: var(--info-50); }
 .badge--neutral { color: var(--text-secondary); background: var(--bg-surface-subtle); }
+.badge-temporary, .badge-temporary:hover { color: var(--warning-600); background: var(--warning-50); border: 1px solid #fde68a; }
+.button-primary { background: var(--brand-600); border-color: var(--brand-600); color: white; }
+.button-primary:hover { background: var(--brand-700); }
+.button-secondary { background: white; border-color: var(--border-strong); }
+.button[disabled], button[disabled], select[disabled] { cursor: not-allowed; opacity: .6; }
 .alert { padding: 16px 18px; }
 .alert--info { border-color: #bae6fd; background: var(--info-50); }
 .alert--success { border-color: #bbf7d0; background: var(--success-50); }
 .alert--warning { border-color: #fde68a; background: var(--warning-50); }
 .alert--danger { border-color: #fecaca; background: var(--danger-50); }
+.alert-info { border-color: #bae6fd; background: var(--info-50); }
+.alert-success { border-color: #bbf7d0; background: var(--success-50); }
+.alert-warning { border-color: #fde68a; background: var(--warning-50); }
+.alert-danger, .alert-error { border-color: #fecaca; background: var(--danger-50); }
 .alert__title { font-weight: 600; margin-bottom: 4px; }
 .empty-state { padding: 40px 24px; text-align: center; display: grid; gap: 12px; place-items: center; }
 .empty-state__icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--brand-50); color: var(--brand-700); }
@@ -116,6 +125,15 @@ tbody tr:hover { background: #fafbfc; }
 .reminder-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border-default); }
 .hidden { display: none !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.temporary-results-callout { display: grid; gap: 6px; }
+.temporary-results-callout h2, .temporary-results-callout h3, .temporary-results-callout p { margin: 0; }
+.row-transient { background: var(--warning-50); }
+.row-transient:hover { background: #fff7dc; }
+.job-card-transient { border-color: #fde68a; background: var(--warning-50); }
+.tracking-form { display: flex; gap: 8px; align-items: center; }
+.tracking-form select { min-width: 150px; }
+.tracking-form-transient[aria-busy="true"] { opacity: .85; }
+.badge-stack { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .source-batch-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface-subtle); }
 .source-batch-toolbar__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .source-batch-toolbar__help { margin: 0; max-width: 520px; }

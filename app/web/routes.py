@@ -276,6 +276,34 @@ def to_job_card(job: JobPosting, source: Source | None, decision: JobDecision | 
         "last_ingested_at": job.last_ingested_at,
         "reason_summary": reason,
         "reminder": reminder,
+        "is_transient": False,
+        "detail_href": f"/jobs/{job.id}",
+    }
+
+
+def to_transient_job_card(job: TransientIngestionJob, source: Source | None) -> dict[str, Any]:
+    return {
+        "id": job.transient_job_id,
+        "transient_job_id": job.transient_job_id,
+        "title": job.title,
+        "company_name": job.company_name or source.name if source else "Unknown company",
+        "source_name": source.name if source else f"Source #{job.source_id}",
+        "source_id": job.source_id,
+        "source_deleted": bool(source and source.deleted_at is not None),
+        "job_url": job.job_url,
+        "location_text": job.location_text,
+        "remote_type": job.remote_type,
+        "current_state": "temporary",
+        "bucket": job.classification.bucket,
+        "score": job.classification.final_score,
+        "manual_keep": False,
+        "tracking_status": None,
+        "last_seen_at": job.last_seen_at,
+        "last_ingested_at": job.last_seen_at,
+        "reason_summary": job.classification.decision_reason_summary,
+        "reminder": None,
+        "is_transient": True,
+        "detail_href": f"/jobs/transient/{job.transient_job_id}",
     }
 
 
@@ -314,6 +342,46 @@ def filter_jobs_by_source(session: Session, jobs: list[JobPosting], source_id: i
         if link:
             filtered.append(job)
     return filtered
+
+
+def filter_transient_jobs(
+    jobs: list[TransientIngestionJob],
+    bucket: str | None,
+    tracking_status: str | None,
+    source_id: int | None,
+    search: str | None,
+) -> list[TransientIngestionJob]:
+    if tracking_status:
+        return []
+    filtered = jobs
+    if bucket:
+        filtered = [job for job in filtered if job.classification.bucket == bucket]
+    if source_id is not None:
+        filtered = [job for job in filtered if job.source_id == source_id]
+    if search:
+        needle = search.lower()
+        filtered = [
+            job
+            for job in filtered
+            if needle in (job.title or "").lower()
+            or needle in (job.company_name or "").lower()
+            or needle in (job.description_text or "").lower()
+        ]
+    return filtered
+
+
+def sort_job_cards(cards: list[dict[str, Any]], sort: str) -> list[dict[str, Any]]:
+    def date_key(job: dict[str, Any]) -> str:
+        value = job.get("last_seen_at")
+        return value.isoformat() if hasattr(value, "isoformat") else str(value or "")
+
+    if sort == "highest_score":
+        return sorted(cards, key=lambda job: (job.get("score") if job.get("score") is not None else -9999, date_key(job)), reverse=True)
+    if sort == "title":
+        return sorted(cards, key=lambda job: (job.get("title") or "").lower())
+    if sort == "company":
+        return sorted(cards, key=lambda job: (job.get("company_name") or "").lower())
+    return sorted(cards, key=date_key, reverse=True)
 
 
 def serialize_job(job: JobPosting) -> JobResponse:
@@ -896,7 +964,9 @@ async def run_source(
     run = IngestionOrchestrator(session, registry).run_source(source, preferences)
     if wants_html(request) or content_type.startswith("application/x-www-form-urlencoded"):
         if run.status in {"success", "partial_success"}:
-            return redirect(with_message(next_url or f"/sources/{source_id}", "success", f"Ingestion finished for {source.name}: fetched {run.jobs_fetched_count} jobs."))
+            transient_count = len(transient_ingestion_registry.list(source_id))
+            temporary_copy = f" {transient_count} temporary untracked result(s) are available on Jobs." if transient_count else ""
+            return redirect(with_message(next_url or f"/sources/{source_id}", "success", f"Ingestion finished for {source.name}: fetched {run.jobs_fetched_count} jobs.{temporary_copy}"))
         else:
             return redirect(with_message(next_url or f"/sources/{source_id}", "error", f"Ingestion failed for {source.name}. Review source health for details."))
     return run
@@ -922,7 +992,12 @@ def list_jobs(
     primary_sources = get_primary_source_map(session, jobs)
     decisions = get_current_decision_map(session, jobs)
     reminder_map = get_pending_reminder_map(session)
-    job_cards = [to_job_card(job, primary_sources.get(job.id), decisions.get(job.id), reminder_map.get(job.id)) for job in jobs]
+    persisted_cards = [to_job_card(job, primary_sources.get(job.id), decisions.get(job.id), reminder_map.get(job.id)) for job in jobs]
+    transient_jobs = filter_transient_jobs(transient_ingestion_registry.list(source_id), bucket, tracking_status, source_id, search)
+    transient_source_ids = {job.source_id for job in transient_jobs}
+    transient_sources = {source.id: source for source in session.scalars(select(Source).where(Source.id.in_(transient_source_ids)))} if transient_source_ids else {}
+    transient_cards = [to_transient_job_card(job, transient_sources.get(job.source_id)) for job in transient_jobs]
+    job_cards = sort_job_cards([*persisted_cards, *transient_cards], sort)
     sources = list(session.scalars(select(Source).where(Source.deleted_at.is_(None)).order_by(Source.name.asc())))
     return render(
         request,
@@ -932,6 +1007,8 @@ def list_jobs(
             "page_key": "jobs",
             "requires_job_preferences": True,
             "jobs": job_cards,
+            "persisted_count": len(persisted_cards),
+            "transient_count": len(transient_cards),
             "filters": {
                 "bucket": bucket or "",
                 "tracking_status": tracking_status or "",
@@ -988,6 +1065,40 @@ async def update_transient_tracking_status(transient_job_id: str, request: Reque
     body = JobResponse.model_validate(job).model_dump(mode="json")
     body["persisted_job_id"] = job.id
     return JSONResponse(status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK, content=body)
+
+
+@router.get("/jobs/transient/{transient_job_id}", response_class=HTMLResponse)
+def get_transient_job_detail(request: Request, transient_job_id: str, session: Session = Depends(get_session_dependency)):
+    job = transient_ingestion_registry.get(transient_job_id)
+    if job is None:
+        return render(
+            request,
+            session,
+            "jobs/transient_detail.html",
+            {
+                "page_key": "jobs",
+                "job": None,
+                "source": None,
+                "matched_rules": [],
+                "negative_rules": [],
+            },
+            status_code=404,
+        )
+    source = session.get(Source, job.source_id)
+    matched_rules = [rule for rule in job.classification.rules if rule.outcome == "matched"]
+    negative_rules = [rule for rule in job.classification.rules if rule.outcome != "matched"]
+    return render(
+        request,
+        session,
+        "jobs/transient_detail.html",
+        {
+            "page_key": "jobs",
+            "job": job,
+            "source": source,
+            "matched_rules": matched_rules,
+            "negative_rules": negative_rules,
+        },
+    )
 
 
 @router.get("/jobs/{job_id}")

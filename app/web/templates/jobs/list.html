@@ -4,7 +4,7 @@
 {% block title %}Jobs · Job Intelligence Platform{% endblock %}
 
 {% block content %}
-  {{ ui.page_header('Jobs', 'Triage ingested jobs by automated bucket, tracking status, source, and search.') }}
+  {{ ui.page_header('Jobs', 'Review tracked jobs and temporary results from the latest ingestion run by automated bucket, tracking status, source, and search.') }}
 
   <section class="panel">
     <form method="get" class="filters-form" data-clean-empty-query="true">
@@ -54,9 +54,22 @@
     </form>
   </section>
 
+  {% if transient_count %}
+    <section class="callout callout-warning temporary-results-callout" aria-labelledby="temporary-results-title">
+      <h2 id="temporary-results-title">Temporary ingestion results</h2>
+      <p>Untracked jobs from the latest ingestion run are only available during this app session. Track a job to save it. Running ingestion again replaces this temporary list.</p>
+    </section>
+  {% endif %}
+
   {% if jobs %}
     <section class="panel jobs-table-panel">
-      <p class="results-summary">{{ jobs|length }} actionable job(s) found. Automated bucket, tracking status, and source health remain separate in this view.</p>
+      <p class="results-summary">
+        {% if transient_count %}
+          {{ jobs|length }} jobs shown: {{ persisted_count }} tracked, {{ transient_count }} temporary from the latest ingestion run.
+        {% else %}
+          {{ jobs|length }} actionable job(s) found. Automated bucket, tracking status, and source health remain separate in this view.
+        {% endif %}
+      </p>
       <div class="table-scroll">
         <table>
           <thead>
@@ -72,20 +85,20 @@
           </thead>
           <tbody>
             {% for job in jobs %}
-              <tr class="{% if job.bucket == 'rejected' %}row-muted{% endif %}">
+              <tr class="{% if job.bucket == 'rejected' %}row-muted{% endif %}{% if job.is_transient %} row-transient{% endif %}"{% if job.is_transient %} aria-busy="false"{% endif %}>
                 <td>
-                  <a href="/jobs/{{ job.id }}"><strong>{{ job.title }}</strong></a>
+                  <a href="{{ job.detail_href }}"><strong>{{ job.title }}</strong></a>
                   <div class="cell-subtitle">{{ job.company_name }} · {{ job.source_name }}{% if job.source_deleted %} <span class="badge badge-muted">Deleted source</span>{% endif %}</div>
                   {% if job.location_text %}<div class="cell-subtitle">{{ job.location_text }}</div>{% endif %}
                 </td>
                 <td>{{ ui.badge('bucket', job.bucket) }}</td>
-                <td>{{ ui.badge('tracking', job.tracking_status) }}</td>
+                <td>{% if job.is_transient %}{{ ui.temporary_badge() }}{% else %}{{ ui.badge('tracking', job.tracking_status) }}{% endif %}</td>
                 <td>{{ job.score if job.score is not none else '—' }}</td>
                 <td class="reason-cell">{{ job.reason_summary }}</td>
                 <td>{{ format_dt(job.last_seen_at) }}</td>
                 <td>
                   <div class="actions-stack">
-                    <a class="button button-secondary" href="/jobs/{{ job.id }}">View</a>
+                    <a class="button button-secondary" href="{{ job.detail_href }}">View</a>
                     {{ ui.keep_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) }}
                     {{ ui.tracking_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else ''), tracking_statuses, True) }}
                   </div>
@@ -99,18 +112,19 @@
 
     <section class="mobile-card-list">
       {% for job in jobs %}
-        <article class="job-card {% if job.bucket == 'rejected' %}job-card-muted{% endif %}">
+        <article class="job-card {% if job.bucket == 'rejected' %}job-card-muted{% endif %}{% if job.is_transient %} job-card-transient{% endif %}"{% if job.is_transient %} aria-busy="false"{% endif %}>
           <div class="job-card__header">
             <div>
-              <h2><a href="/jobs/{{ job.id }}">{{ job.title }}</a></h2>
+              <h2><a href="{{ job.detail_href }}">{{ job.title }}</a></h2>
               <p class="muted">{{ job.company_name }} · {{ job.source_name }}{% if job.source_deleted %} <span class="badge badge-muted">Deleted source</span>{% endif %}</p>
             </div>
-            <div class="badge-stack">{{ ui.badge('bucket', job.bucket) }} {{ ui.badge('tracking', job.tracking_status) }}</div>
+            <div class="badge-stack">{% if job.is_transient %}{{ ui.temporary_badge() }}{% endif %} {{ ui.badge('bucket', job.bucket) }} {% if not job.is_transient %}{{ ui.badge('tracking', job.tracking_status) }}{% endif %}</div>
           </div>
+          {% if job.is_transient %}<p class="muted">Temporary result. Track it to save it before running ingestion again or restarting the app.</p>{% endif %}
           <p>{{ job.reason_summary }}</p>
           <p class="muted">Score: {{ job.score if job.score is not none else '—' }} · {{ format_dt(job.last_seen_at) }}</p>
           <div class="button-row button-row-wrap">
-            <a class="button button-secondary" href="/jobs/{{ job.id }}">View</a>
+            <a class="button button-secondary" href="{{ job.detail_href }}">View</a>
             {{ ui.keep_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else '')) }}
           </div>
           {{ ui.tracking_form(job, request.url.path ~ ('?' ~ request.url.query if request.url.query else ''), tracking_statuses) }}
