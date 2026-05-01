@@ -11,6 +11,14 @@ from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.persistence.models import Base
 from app.web.routes import get_session_dependency
+from app.domain.transient_ingestion import transient_ingestion_registry
+
+
+@pytest.fixture(autouse=True)
+def clear_transient_ingestion_registry():
+    transient_ingestion_registry.clear()
+    yield
+    transient_ingestion_registry.clear()
 
 
 @pytest.fixture

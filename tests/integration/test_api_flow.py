@@ -57,10 +57,20 @@ def test_manual_source_ingestion_keep_tracking_digest_and_reminders(client, sess
 
     jobs_response = client.get("/jobs")
     assert jobs_response.status_code == 200
-    jobs = jobs_response.json()
-    assert len(jobs) == 1
-    assert jobs[0]["latest_bucket"] == "matched"
-    job_id = jobs[0]["id"]
+    assert jobs_response.json() == []
+
+    transient_response = client.get("/ingestion/transient-jobs")
+    assert transient_response.status_code == 200
+    transient_jobs = transient_response.json()["items"]
+    assert len(transient_jobs) == 1
+    assert transient_jobs[0]["latest_bucket"] == "matched"
+
+    track_transient_response = client.post(
+        f"/ingestion/transient-jobs/{transient_jobs[0]['transient_job_id']}/tracking-status",
+        json={"tracking_status": "saved", "note_text": "Reviewing"},
+    )
+    assert track_transient_response.status_code == 201
+    job_id = track_transient_response.json()["persisted_job_id"]
 
     keep_response = client.post(f"/jobs/{job_id}/keep")
     assert keep_response.status_code == 200
@@ -218,7 +228,12 @@ def test_jobs_api_treats_empty_source_filter_as_unset_and_keeps_integer_filterin
 
     empty_filter_response = client.get("/jobs?source_id=")
     assert empty_filter_response.status_code == 200
-    assert len(empty_filter_response.json()) == 1
+    assert len(empty_filter_response.json()) == 0
+
+    track_response = client.get(f"/ingestion/transient-jobs?source_id={source_id}")
+    transient_id = track_response.json()["items"][0]["transient_job_id"]
+    persisted_response = client.post(f"/ingestion/transient-jobs/{transient_id}/tracking-status", json={"tracking_status": "saved"})
+    assert persisted_response.status_code == 201
 
     valid_filter_response = client.get(f"/jobs?source_id={source_id}")
     assert valid_filter_response.status_code == 200

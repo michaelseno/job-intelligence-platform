@@ -31,6 +31,16 @@ class RuleResult:
     explanation_text: str
 
 
+@dataclass
+class ClassificationSnapshot:
+    decision_version: str
+    bucket: str
+    final_score: int
+    sponsorship_state: str
+    decision_reason_summary: str
+    rules: list[RuleResult]
+
+
 ROLE_POSITIVES = DEFAULT_ROLE_POSITIVES
 ROLE_NEGATIVES = DEFAULT_ROLE_NEGATIVES
 REMOTE_POSITIVES = DEFAULT_REMOTE_POSITIVES
@@ -47,7 +57,7 @@ class ClassificationService:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def classify_job(self, job: JobPosting, preferences: JobFilterPreferences) -> JobDecision:
+    def preview_job(self, job, preferences: JobFilterPreferences) -> ClassificationSnapshot:
         text = " ".join(filter(None, [job.title, job.location_text, job.description_text, job.sponsorship_text]))
         lower = clean_text(text).lower()
         rules: list[RuleResult] = []
@@ -148,19 +158,29 @@ class ClassificationService:
             bucket = "rejected"
             summary = "Rejected because the role did not align with target role families."
 
-        self.session.execute(update(JobDecision).where(JobDecision.job_posting_id == job.id).values(is_current=False))
-        decision = JobDecision(
-            job_posting_id=job.id,
+        return ClassificationSnapshot(
             decision_version=self.decision_version,
             bucket=bucket,
             final_score=score,
             sponsorship_state=sponsorship_state,
             decision_reason_summary=summary,
+            rules=rules,
+        )
+
+    def persist_snapshot(self, job: JobPosting, snapshot: ClassificationSnapshot) -> JobDecision:
+        self.session.execute(update(JobDecision).where(JobDecision.job_posting_id == job.id).values(is_current=False))
+        decision = JobDecision(
+            job_posting_id=job.id,
+            decision_version=snapshot.decision_version,
+            bucket=snapshot.bucket,
+            final_score=snapshot.final_score,
+            sponsorship_state=snapshot.sponsorship_state,
+            decision_reason_summary=snapshot.decision_reason_summary,
             is_current=True,
         )
         self.session.add(decision)
         self.session.flush()
-        for rule in rules:
+        for rule in snapshot.rules:
             self.session.add(
                 JobDecisionRule(
                     job_decision_id=decision.id,
@@ -178,3 +198,6 @@ class ClassificationService:
         job.latest_decision_id = decision.id
         self.session.flush()
         return decision
+
+    def classify_job(self, job: JobPosting, preferences: JobFilterPreferences) -> JobDecision:
+        return self.persist_snapshot(job, self.preview_job(job, preferences))

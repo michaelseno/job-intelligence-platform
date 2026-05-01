@@ -35,6 +35,7 @@ from app.domain.source_batch_runs import (
     build_session_factory_from_session,
 )
 from app.domain.sources import SourceService
+from app.domain.transient_ingestion import TransientIngestionJob, transient_ingestion_registry
 from app.domain.tracking import TrackingService, VALID_TRACKING_STATUSES
 from app.persistence.db import get_db_session
 from app.persistence.models import Digest, DigestItem, JobDecision, JobDecisionRule, JobPosting, JobSourceLink, Reminder, Source, SourceRun
@@ -57,6 +58,8 @@ from app.schemas import (
     SourceRunResponse,
     SourceUpdateRequest,
     TrackingStatusRequest,
+    TransientJobListItemResponse,
+    TransientJobListResponse,
 )
 from app.web.dependencies import get_registry
 
@@ -315,6 +318,55 @@ def filter_jobs_by_source(session: Session, jobs: list[JobPosting], source_id: i
 
 def serialize_job(job: JobPosting) -> JobResponse:
     return JobResponse.model_validate(job)
+
+
+def serialize_transient_list_item(job: TransientIngestionJob) -> TransientJobListItemResponse:
+    return TransientJobListItemResponse(
+        transient_job_id=job.transient_job_id,
+        source_id=job.source_id,
+        source_run_id=job.source_run_id,
+        title=job.title,
+        company_name=job.company_name,
+        job_url=job.job_url,
+        location_text=job.location_text,
+        employment_type=job.employment_type,
+        remote_type=job.remote_type,
+        posted_at=job.posted_at,
+        latest_bucket=job.classification.bucket,
+        latest_score=job.classification.final_score,
+        tracking_status=None,
+        created_at=job.created_at,
+    )
+
+
+def serialize_transient_detail(job: TransientIngestionJob) -> dict[str, Any]:
+    return {
+        **serialize_transient_list_item(job).model_dump(),
+        "id": job.transient_job_id,
+        "description_text": job.description_text,
+        "sponsorship_text": job.sponsorship_text,
+        "decision": {
+            "id": None,
+            "decision_version": job.classification.decision_version,
+            "bucket": job.classification.bucket,
+            "final_score": job.classification.final_score,
+            "sponsorship_state": job.classification.sponsorship_state,
+            "decision_reason_summary": job.classification.decision_reason_summary,
+            "created_at": job.created_at,
+            "rules": [rule.__dict__ for rule in job.classification.rules],
+        },
+        "source_links": [
+            {
+                "source_id": job.source_id,
+                "source_run_id": job.source_run_id,
+                "external_job_id": job.external_job_id,
+                "source_job_url": job.job_url,
+                "last_seen_at": job.last_seen_at,
+            }
+        ],
+        "tracking_events": [],
+        "is_transient": True,
+    }
 
 
 def enqueue_source_delete_cleanup(background_tasks: BackgroundTasks, source_id: int) -> None:
@@ -890,6 +942,52 @@ def list_jobs(
             "available_sources": sources,
         },
     )
+
+
+@router.get("/ingestion/transient-jobs", response_model=TransientJobListResponse)
+def list_transient_jobs(source_id: int | None = Depends(parse_optional_source_id)):
+    items = [serialize_transient_list_item(job) for job in transient_ingestion_registry.list(source_id)]
+    return TransientJobListResponse(items=items)
+
+
+@router.get("/ingestion/transient-jobs/{transient_job_id}")
+def get_transient_job(transient_job_id: str):
+    job = transient_ingestion_registry.get(transient_job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Transient job not found.")
+    return serialize_transient_detail(job)
+
+
+@router.post("/ingestion/transient-jobs/{transient_job_id}/tracking-status")
+async def update_transient_tracking_status(transient_job_id: str, request: Request, session: Session = Depends(get_session_dependency)):
+    content_type = request.headers.get("content-type", "")
+    next_url = None
+    if content_type.startswith("application/json"):
+        payload = TrackingStatusRequest(**(await request.json()))
+    else:
+        form = await request.form()
+        next_url = form.get("next")
+        payload = TrackingStatusRequest(
+            tracking_status=str(form.get("tracking_status", "")),
+            note_text=str(form.get("note_text", "")) or None,
+        )
+
+    try:
+        job, created = TrackingService(session).track_transient_job(transient_job_id, payload.tracking_status, payload.note_text)
+    except ValueError as exc:
+        if content_type.startswith("application/json"):
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return redirect(with_message(str(next_url or "/jobs"), "error", str(exc)))
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if wants_html(request) or not content_type.startswith("application/json"):
+        return redirect(with_message(str(next_url or f"/jobs/{job.id}"), "success", "Job tracked and saved."))
+    body = JobResponse.model_validate(job).model_dump(mode="json")
+    body["persisted_job_id"] = job.id
+    return JSONResponse(status_code=status.HTTP_201_CREATED if created else status.HTTP_200_OK, content=body)
 
 
 @router.get("/jobs/{job_id}")
