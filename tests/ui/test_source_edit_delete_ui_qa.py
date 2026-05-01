@@ -35,6 +35,19 @@ def create_source(client, *, name: str, base_slug: str, is_active: bool = True):
     return response.json()
 
 
+def track_first_transient_job(client, source_id: int, *, tracking_status: str = "saved") -> int:
+    transient_response = client.get(f"/ingestion/transient-jobs?source_id={source_id}")
+    assert transient_response.status_code == 200
+    transient_jobs = transient_response.json()["items"]
+    assert len(transient_jobs) == 1
+    track_response = client.post(
+        f"/ingestion/transient-jobs/{transient_jobs[0]['transient_job_id']}/tracking-status",
+        json={"tracking_status": tracking_status},
+    )
+    assert track_response.status_code == 201
+    return track_response.json()["persisted_job_id"]
+
+
 def test_sources_html_exposes_edit_and_delete_actions_from_list_and_detail(client):
     source = create_source(client, name="List Action Source", base_slug="list-action-source")
 
@@ -69,9 +82,7 @@ def test_source_delete_confirmation_explains_async_cleanup_and_retention(client,
     run_response = client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
     assert run_response.status_code == 200
 
-    jobs_response = client.get("/jobs")
-    assert jobs_response.status_code == 200
-    job_id = jobs_response.json()[0]["id"]
+    job_id = track_first_transient_job(client, source["id"])
 
     tracking_response = client.post(
         f"/jobs/{job_id}/tracking-status",
@@ -190,9 +201,7 @@ def test_deleted_source_non_retained_job_uses_normal_not_found(client, monkeypat
     run_response = client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
     assert run_response.status_code == 200
 
-    jobs_response = client.get("/jobs")
-    assert jobs_response.status_code == 200
-    job_id = jobs_response.json()[0]["id"]
+    job_id = track_first_transient_job(client, source["id"])
 
     delete_response = client.post(
         f"/sources/{source['id']}/delete",

@@ -45,6 +45,13 @@ def seed_job(client, monkeypatch):
         },
     ).json()
     client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
+    transient_jobs = client.get(f"/ingestion/transient-jobs?source_id={source['id']}").json()["items"]
+    assert len(transient_jobs) == 1
+    track_response = client.post(
+        f"/ingestion/transient-jobs/{transient_jobs[0]['transient_job_id']}/tracking-status",
+        json={"tracking_status": "saved"},
+    )
+    assert track_response.status_code == 201
     return client.get("/jobs").json()[0]
 
 
@@ -73,6 +80,13 @@ def seed_job_with_source(client, monkeypatch):
         },
     ).json()
     client.post(f"/sources/{source['id']}/run", json={"job_preferences": job_preferences_payload()})
+    transient_jobs = client.get(f"/ingestion/transient-jobs?source_id={source['id']}").json()["items"]
+    assert len(transient_jobs) == 1
+    track_response = client.post(
+        f"/ingestion/transient-jobs/{transient_jobs[0]['transient_job_id']}/tracking-status",
+        json={"tracking_status": "saved"},
+    )
+    assert track_response.status_code == 201
     job = client.get("/jobs").json()[0]
     return source, job
 
