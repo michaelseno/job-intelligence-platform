@@ -45,9 +45,21 @@
 
     <section class="surface wizard-step hidden" data-wizard-step="1">
       <h2 tabindex="-1">Location</h2>
-      <p class="muted">Choose countries you are open to for your job search.</p>
-      <fieldset id="country-group" class="option-grid option-grid--countries" aria-describedby="country-error"></fieldset>
-      <p id="country-summary" class="selected-summary">No countries selected.</p>
+      <p class="muted">Choose countries or select whole regions you are open to for your job search.</p>
+      <div id="country-legacy-warning" class="alert alert--warning hidden" role="status">Some saved countries could not be matched to the updated country list. Review locations before saving.</div>
+      <div class="location-toolbar">
+        <div class="field-group">
+          <label for="location-search">Search countries or regions</label>
+          <input id="location-search" type="search" placeholder="Type a country or region" aria-describedby="location-search-help country-summary country-error">
+          <p id="location-search-help" class="field-help">Search by country, stable ID, alias, or region. Selecting a region includes all countries in that region.</p>
+        </div>
+        <div class="location-toolbar__actions">
+          <button id="location-clear" class="btn btn--secondary" type="button" disabled>Clear all locations</button>
+        </div>
+      </div>
+      <p id="country-summary" class="selected-summary" aria-live="polite">No countries selected.</p>
+      <div id="country-group" class="location-region-list" aria-describedby="country-error"></div>
+      <p id="country-empty" class="location-no-results field-help hidden">No countries or regions match your search.</p>
       <p id="country-error" class="field-error" data-step-error="countries"></p>
     </section>
 
