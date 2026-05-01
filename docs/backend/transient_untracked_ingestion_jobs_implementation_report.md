@@ -87,4 +87,4 @@ No logging or monitoring changes were made in the remediation pass.
 - Full suite is green locally. Remaining warnings are existing Alembic deprecation warnings in schema guard tests.
 
 ## 12. Commit Status
-Original backend implementation committed in `2e16944` (`feat(backend): implement transient untracked ingestion jobs`). Remediation commit pending at report update time.
+Original backend implementation committed in `2e16944` (`feat(backend): implement transient untracked ingestion jobs`). Remediation committed in `11dccf0` (`test(backend): remediate transient ingestion suite failures`).
