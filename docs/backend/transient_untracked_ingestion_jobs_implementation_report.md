@@ -62,4 +62,4 @@ Ingestion logs fetched, persisted created/updated/unchanged, and transient captu
 - UI templates were not changed in this backend-focused pass; transient API support is present for UI integration.
 
 ## 12. Commit Status
-Pending commit.
+Committed backend implementation in `2e16944` (`feat(backend): implement transient untracked ingestion jobs`).
