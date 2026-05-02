@@ -229,6 +229,27 @@ class TrackingStatusRequest(BaseModel):
     note_text: str | None = None
 
 
+class TransientJobListItemResponse(BaseModel):
+    transient_job_id: str
+    source_id: int
+    source_run_id: int
+    title: str
+    company_name: str | None
+    job_url: str
+    location_text: str | None
+    employment_type: str | None
+    remote_type: str | None
+    posted_at: datetime | None
+    latest_bucket: str | None
+    latest_score: int | None
+    tracking_status: None = None
+    created_at: datetime
+
+
+class TransientJobListResponse(BaseModel):
+    items: list[TransientJobListItemResponse]
+
+
 class DigestItemResponse(BaseModel):
     job_posting_id: int
     bucket: str

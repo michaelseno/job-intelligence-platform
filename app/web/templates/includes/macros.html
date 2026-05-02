@@ -10,6 +10,11 @@
   {% endif %}
 {%- endmacro %}
 
+{% macro temporary_badge() -%}
+  <span class="badge badge-temporary" title="Temporary untracked ingestion result">Temporary</span>
+  <span class="sr-only">This is a temporary untracked ingestion result. Track it to save it.</span>
+{%- endmacro %}
+
 {% macro page_header(title, description='', actions='') -%}
   <section class="page-header">
     <div>
@@ -37,24 +42,27 @@
 {%- endmacro %}
 
 {% macro keep_form(job, next_url) -%}
-  <form method="post" action="/jobs/{{ job.id }}/keep" class="inline-form">
-    <input type="hidden" name="next" value="{{ next_url }}">
-    <button class="button button-secondary" type="submit" {% if job.tracking_status %}disabled{% endif %}>
-      {% if job.tracking_status %}Already tracked{% else %}Save / Keep Job{% endif %}
-    </button>
-  </form>
+  {% if not job.is_transient|default(false) %}
+    <form method="post" action="/jobs/{{ job.id }}/keep" class="inline-form">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <button class="button button-secondary" type="submit" {% if job.tracking_status %}disabled{% endif %}>
+        {% if job.tracking_status %}Already tracked{% else %}Save / Keep Job{% endif %}
+      </button>
+    </form>
+  {% endif %}
 {%- endmacro %}
 
 {% macro tracking_form(job, next_url, statuses, compact=False) -%}
-  <form method="post" action="/jobs/{{ job.id }}/tracking-status" class="tracking-form{% if compact %} tracking-form-compact{% endif %}" data-auto-submit>
+  {% set is_transient = job.is_transient|default(false) %}
+  <form method="post" action="{% if is_transient %}/ingestion/transient-jobs/{{ job.transient_job_id }}/tracking-status{% else %}/jobs/{{ job.id }}/tracking-status{% endif %}" class="tracking-form{% if compact %} tracking-form-compact{% endif %}{% if is_transient %} tracking-form-transient{% endif %}" data-auto-submit{% if is_transient %} data-transient-tracking-form{% endif %}>
     <input type="hidden" name="next" value="{{ next_url }}">
     <label class="sr-only" for="tracking-status-{{ job.id }}">Tracking status for {{ job.title }}</label>
-    <select id="tracking-status-{{ job.id }}" name="tracking_status">
+    <select id="tracking-status-{{ job.id }}" name="tracking_status" {% if is_transient %}required{% endif %}>
       <option value="">Select status</option>
       {% for status in statuses %}
         <option value="{{ status }}" {% if job.tracking_status == status %}selected{% endif %}>{{ status|title }}</option>
       {% endfor %}
     </select>
-    <button class="button button-secondary" type="submit">Update</button>
+    <button class="button {% if is_transient %}button-primary{% else %}button-secondary{% endif %}" type="submit">{% if is_transient %}Track job{% else %}Update{% endif %}</button>
   </form>
 {%- endmacro %}

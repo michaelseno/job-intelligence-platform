@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% import 'includes/macros.html' as ui %}
+
+{% block title %}{% if job %}{{ job.title }} · Temporary Job{% else %}Temporary job unavailable{% endif %} · Job Intelligence Platform{% endblock %}
+
+{% block content %}
+  {% if not job %}
+    {{ ui.page_header('Temporary job unavailable', 'This temporary result is no longer available. Run ingestion again or track a currently visible result.') }}
+    <div class="alert alert-danger" role="alert">This temporary result is no longer available. Run ingestion again or track a currently visible result.</div>
+    <p><a class="button button-secondary" href="/jobs">Back to Jobs</a></p>
+  {% else %}
+    {{ ui.page_header(job.title, (job.company_name or 'Unknown company') ~ ' · Temporary ingestion result. Track it to save it.') }}
+
+    <section class="callout callout-warning temporary-results-callout" aria-labelledby="temporary-detail-title">
+      <h2 id="temporary-detail-title">Temporary ingestion result</h2>
+      <p>This job is only available during this app session. Track it to save it. Running ingestion again replaces temporary results.</p>
+    </section>
+
+    <div class="detail-layout">
+      <div class="detail-main">
+        <section class="panel">
+          <div class="job-summary-grid">
+            <div>
+              <p class="eyebrow">Automated classification</p>
+              <div class="badge-stack">{{ ui.temporary_badge() }} {{ ui.badge('bucket', job.classification.bucket) }}</div>
+            </div>
+            <div>
+              <p class="eyebrow">Score</p>
+              <p class="score-display">{{ job.classification.final_score if job.classification.final_score is not none else '—' }}</p>
+            </div>
+            <div>
+              <p class="eyebrow">Location</p>
+              <p>{{ job.location_text or 'Not provided' }}</p>
+            </div>
+            <div>
+              <p class="eyebrow">Source</p>
+              <p>{{ source.name if source else 'Source #' ~ job.source_id }}</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Decision summary</h2>
+          <p>{{ job.classification.decision_reason_summary }}</p>
+          <ul class="meta-list">
+            <li><strong>Bucket:</strong> {{ job.classification.bucket|title }}</li>
+            <li><strong>Final score:</strong> {{ job.classification.final_score }}</li>
+            <li><strong>Sponsorship state:</strong> {{ job.classification.sponsorship_state|replace('_', ' ')|title }}</li>
+            <li><strong>Captured:</strong> {{ format_dt(job.created_at) }}</li>
+          </ul>
+        </section>
+
+        <section class="panel">
+          <h2>Matched rules</h2>
+          {% if matched_rules %}
+            <ul class="rule-list">
+              {% for rule in matched_rules %}
+                <li class="rule-item">
+                  <div class="rule-item__header"><strong>{{ rule.rule_key|replace('_', ' ')|title }}</strong><span class="rule-score">+{{ rule.score_delta }}</span></div>
+                  <p>{{ rule.explanation_text }}</p>
+                  {% if rule.evidence_snippet %}<blockquote>{{ rule.evidence_snippet }}</blockquote>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">No positive rule evidence available.</p>
+          {% endif %}
+        </section>
+
+        <section class="panel">
+          <h2>Rejected rules / negative signals</h2>
+          {% if negative_rules %}
+            <ul class="rule-list">
+              {% for rule in negative_rules %}
+                <li class="rule-item rule-item-negative">
+                  <div class="rule-item__header"><strong>{{ rule.rule_key|replace('_', ' ')|title }}</strong><span class="rule-score">{{ rule.score_delta }}</span></div>
+                  <p>{{ rule.explanation_text }}</p>
+                  {% if rule.evidence_snippet %}<blockquote>{{ rule.evidence_snippet }}</blockquote>{% endif %}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="muted">No negative rules available for this temporary result.</p>
+          {% endif %}
+        </section>
+
+        <section class="panel">
+          <h2>Description excerpt</h2>
+          <div class="prose-block">{{ job.description_text or 'No description text captured.' }}</div>
+        </section>
+      </div>
+
+      <aside class="detail-sidebar">
+        <section class="panel">
+          <h2>Track to save</h2>
+          <form method="post" action="/ingestion/transient-jobs/{{ job.transient_job_id }}/tracking-status" class="tracking-form tracking-form-transient" data-transient-tracking-form>
+            <input type="hidden" name="next" value="/jobs">
+            <label class="sr-only" for="tracking-status-{{ job.transient_job_id }}">Tracking status for {{ job.title }}</label>
+            <select id="tracking-status-{{ job.transient_job_id }}" name="tracking_status" required>
+              <option value="">Select status</option>
+              {% for status in tracking_statuses %}<option value="{{ status }}">{{ status|title }}</option>{% endfor %}
+            </select>
+            <button class="button button-primary" type="submit">Track job</button>
+          </form>
+          <p class="muted">Tracking this job saves it and moves future actions to the normal persisted job page.</p>
+          <a class="button button-secondary" href="{{ job.job_url }}" target="_blank" rel="noreferrer">Open source posting</a>
+        </section>
+      </aside>
+    </div>
+  {% endif %}
+{% endblock %}

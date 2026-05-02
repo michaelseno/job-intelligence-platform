@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
 
 import pytest
 
@@ -15,6 +14,7 @@ from app.domain.source_batch_runs import (
     build_session_factory_from_session,
 )
 from app.persistence.models import Source
+from app.schemas import SourceBatchSourceResult
 
 
 def add_source(session, name: str, *, health_state: str = "healthy", is_active: bool = True) -> Source:
@@ -63,34 +63,33 @@ def test_batch_executor_never_exceeds_five_concurrent_source_runs(session, monke
     first_wave_ready = threading.Event()
     release_first_wave = threading.Event()
 
-    @dataclass
-    class FakeRun:
-        id: int
-        status: str = "success"
-        log_summary: str | None = None
+    def fake_run_source_with_retries(self, batch_id, source_ref, preferences):
+        nonlocal active, max_active
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+            if active == 5:
+                first_wave_ready.set()
 
-    class FakeOrchestrator:
-        def __init__(self, session, registry):
-            self.session = session
+        if first_wave_ready.wait(timeout=2):
+            release_first_wave.set()
+        release_first_wave.wait(timeout=2)
 
-        def run_source(self, source, preferences, trigger_type="manual"):
-            nonlocal active, max_active
-            assert trigger_type == "batch_manual"
-            with lock:
-                active += 1
-                max_active = max(max_active, active)
-                if active == 5:
-                    first_wave_ready.set()
+        with lock:
+            active -= 1
+        self.registry.update_source_result(
+            batch_id,
+            SourceBatchSourceResult(
+                source_id=source_ref.source_id,
+                source_name=source_ref.source_name,
+                status="success",
+                attempts_used=1,
+                source_run_ids=[source_ref.source_id],
+                last_error=None,
+            ),
+        )
 
-            if first_wave_ready.wait(timeout=2):
-                release_first_wave.set()
-            release_first_wave.wait(timeout=2)
-
-            with lock:
-                active -= 1
-            return FakeRun(id=source.id)
-
-    monkeypatch.setattr("app.domain.source_batch_runs.IngestionOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr(SourceBatchExecutor, "_run_source_with_retries", fake_run_source_with_retries)
 
     SourceBatchExecutor(
         adapter_registry,

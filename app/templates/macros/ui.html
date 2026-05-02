@@ -2,6 +2,10 @@
 <span class="badge badge--{{ tone }}">{{ label }}</span>
 {%- endmacro %}
 
+{% macro temporary_badge() -%}
+<span class="badge badge-temporary" title="Temporary untracked ingestion result">Temporary</span><span class="sr-only">This is a temporary untracked ingestion result. Track it to save it.</span>
+{%- endmacro %}
+
 {% macro empty_state(title, body, cta_href=None, cta_label=None) -%}
 <section class="empty-state">
   <div class="empty-state__icon">◎</div>
